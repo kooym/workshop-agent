@@ -1,0 +1,31 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+tsconfig.tsbuildinfo
+dist/
+build/
+
+# environment
+.env
+.env.local
+.env.*.local
+
+# phase execution outputs
+phases/**/phase*-output.json
+phases/**/step*-output.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

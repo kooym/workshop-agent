@@ -1,0 +1,16 @@
+{
+  "project": "Workshop Agent",
+  "phase": "mvp",
+  "steps": [
+    { "step": 0, "name": "project-setup", "status": "pending" },
+    { "step": 1, "name": "db-schema", "status": "pending" },
+    { "step": 2, "name": "auth-invite", "status": "pending" },
+    { "step": 3, "name": "workshop-crud", "status": "pending" },
+    { "step": 4, "name": "realtime-board", "status": "pending" },
+    { "step": 5, "name": "ai-clustering", "status": "pending" },
+    { "step": 6, "name": "dot-voting", "status": "pending" },
+    { "step": 7, "name": "ax-derivation", "status": "pending" },
+    { "step": 8, "name": "prd-generation", "status": "pending" },
+    { "step": 9, "name": "stage-flow", "status": "pending" }
+  ]
+}
