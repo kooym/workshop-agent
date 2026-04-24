@@ -15,6 +15,9 @@ build/
 phases/**/phase*-output.json
 phases/**/step*-output.json
 
+# local datasets
+datasets/**/*.parquet
+
 # IDE
 .vscode/
 .idea/

@@ -1,5 +1,13 @@
 # 아키텍처
 
+## 관련 문서
+
+- 문서 진입점: `docs/INDEX.md`
+- MECE 모듈 경계와 데이터/API 소유권: `docs/MODULE_MAP.md`
+- 모듈별 상세 계약: `docs/modules/*.md`
+- 스펙 충돌과 최종 결정: `docs/SPEC_AUDIT.md`
+- 운영/배포/장애 대응: `docs/OPERATIONS.md`
+
 ## 시스템 구성
 
 ```
@@ -7,33 +15,29 @@
 │                      Client (Browser)                       │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │  Next.js App (React)                                  │  │
-│  │  - Pages: 워크샵 생성, 보드, 클러스터, 투표, 과제, PRD │  │
+│  │  - tldraw (화이트보드 캔버스, Gather 단계)          │  │
+│  │  - Yjs (CRDT 멀티플레이어 동기화)                │  │
 │  │  - Realtime: DB 변경 구독 (Supabase Realtime)         │  │
 │  │  - State: Zustand (클라이언트 상태 관리)               │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────┬───────────────────────────────────────────┘
                   │ HTTPS / WSS
 ┌─────────────────▼───────────────────────────────────────────┐
-│                    Next.js API Routes                        │
+│  Azure App Service (Docker Container)                        │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │  /api/workshops     — 워크샵 CRUD                     │  │
-│  │  /api/notes         — 포스트잇 CRUD                   │  │
-│  │  /api/clusters      — 클러스터 관리                   │  │
-│  │  /api/votes         — 투표 처리                       │  │
-│  │  /api/tasks         — AX 과제 관리                    │  │
-│  │  /api/prd           — PRD 생성/관리                   │  │
-│  │  /api/ai/cluster    — AI 클러스터링 (Azure OpenAI)    │  │
-│  │  /api/ai/derive     — AI 과제 도출 (Azure OpenAI)     │  │
-│  │  /api/ai/generate   — AI PRD 생성 (Azure OpenAI)      │  │
+│  │  Next.js Standalone Server                             │  │
+│  │  - API Routes (/api/workshops, /api/notes, /api/ai/*) │  │
+│  │  - Server Components (SSR)                            │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────┬───────────────────────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────────────────────┐
-│                     Supabase                                 │
+│                     Supabase (Cloud)                         │
 │  ┌──────────┐  ┌──────────────┐  ┌────────────────────┐    │
-│  │ PostgreSQL│  │ Realtime     │  │ Auth (초대 코드)    │    │
-│  │ (DB)     │  │ (WebSocket)  │  │                    │    │
-│  └──────────┘  └──────────────┘  └────────────────────┘    │
+│  │ PostgreSQL│  │ Realtime     │  │ Auth               │    │
+│  │ (DB)     │  │ (WebSocket)  │  │ (퍼실리테이터 JWT │    │
+│  └──────────┘  └──────────────┘  │  + 참석자 쿠키)  │    │
+│                                    └────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────────────────────┐
@@ -42,6 +46,9 @@
 │  - AX 과제 도출: GPT-4o                                      │
 │  - PRD 생성: GPT-4o                                          │
 └─────────────────────────────────────────────────────────────┘
+
+배포: Azure Container Registry → Azure App Service (Linux Container)
+Yjs 동기화: y-supabase 어댑터로 Supabase에 영속화 (별도 Yjs 서버 불필요)
 ```
 
 ## 디렉토리 구조
@@ -49,16 +56,30 @@
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── page.tsx            # 랜딩 (워크샵 생성/참여)
+│   ├── page.tsx            # 랜딩 (초대 코드 참여 + 퍼실리테이터 로그인 링크)
+│   ├── auth/
+│   │   ├── login/page.tsx  # 퍼실리테이터 로그인
+│   │   └── signup/page.tsx # 퍼실리테이터 회원가입
+│   ├── dashboard/
+│   │   ├── page.tsx        # 퍼실리테이터 프로젝트 목록
+│   │   └── project/
+│   │       └── [projectId]/
+│   │           └── page.tsx  # 프로젝트 내 워크샵 목록
 │   ├── workshop/
 │   │   └── [id]/
+│   │       ├── layout.tsx  # 세션 검증 + Realtime 구독
 │   │       ├── page.tsx    # 워크샵 메인 (단계별 뷰 전환)
-│   │       ├── board/      # Stage 1: 포스트잇 보드
+│   │       ├── board/      # Stage 1: tldraw 화이트보드
 │   │       ├── cluster/    # Stage 2: 클러스터 뷰
 │   │       ├── vote/       # Stage 3: 투표
 │   │       ├── derive/     # Stage 4: AX 과제 도출
 │   │       └── prd/        # Stage 5: PRD 생성
 │   └── api/
+│       ├── auth/
+│       │   ├── signup/     # 퍼실리테이터 회원가입
+│       │   ├── login/      # 퍼실리테이터 로그인
+│       │   └── logout/     # 퍼실리테이터 로그아웃
+│       ├── projects/       # 프로젝트 CRUD (withFacilitator)
 │       ├── workshops/      # 워크샵 CRUD
 │       ├── notes/          # 포스트잇 CRUD
 │       ├── clusters/       # 클러스터 관리
@@ -70,10 +91,17 @@ src/
 │           ├── derive/     # AI 과제 도출 엔드포인트
 │           └── generate/   # AI PRD 생성 엔드포인트
 ├── components/
-│   ├── board/              # 포스트잇 보드 컴포넌트
-│   │   ├── StickyNote.tsx
-│   │   ├── Board.tsx
-│   │   └── NoteInput.tsx
+│   ├── auth/               # 인증 컴포넌트
+│   │   ├── LoginForm.tsx
+│   │   ├── SignupForm.tsx
+│   │   └── AuthGuard.tsx   # 퍼실리테이터 인증 보호
+│   ├── dashboard/          # 대시보드 컴포넌트
+│   │   ├── ProjectList.tsx # 프로젝트 목록
+│   │   └── WorkshopList.tsx # 프로젝트 내 워크샵 목록
+│   ├── board/              # 화이트보드 컴포넌트
+│   │   ├── WhiteboardCanvas.tsx  # tldraw 캔버스 래퍼
+│   │   ├── StickyNoteShape.tsx   # tldraw 커스텀 포스트잇 shape
+│   │   └── BoardToolbar.tsx      # 보드 도구모음
 │   ├── cluster/            # 클러스터 뷰 컴포넌트
 │   │   ├── ClusterGroup.tsx
 │   │   └── ClusterView.tsx
@@ -96,16 +124,28 @@ src/
 │       ├── Button.tsx
 │       ├── Card.tsx
 │       ├── Modal.tsx
-│       └── Input.tsx
+│       ├── ConfirmModal.tsx  # 확인 대화상자 (단계 전환 등)
+│       ├── Input.tsx
+│       ├── Textarea.tsx
+│       ├── Badge.tsx         # 태그/라벨 표시
+│       ├── Toast.tsx         # 알림 토스트
+│       ├── Skeleton.tsx      # 로딩 스케레톤
+│       └── EmptyState.tsx    # 빈 상태 UI
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts       # Supabase 브라우저 클라이언트
 │   │   ├── server.ts       # Supabase 서버 클라이언트
-│   │   └── types.ts        # DB 타입 (자동생성)
+│   │   └── types.ts        # DB 타입 (수동 작성)
 │   ├── ai/
 │   │   ├── openai.ts       # Azure OpenAI 클라이언트
 │   │   ├── prompts.ts      # AI 프롬프트 템플릿
-│   │   └── schemas.ts      # AI 응답 JSON 스키마
+│   │   └── schemas.ts      # AI 응답 JSON 스키마 (Zod)
+│   ├── api/
+│   │   ├── middleware.ts   # 공통 미들웨어 (withAuth, withFacilitator)
+│   │   ├── validators.ts   # API 요청 body Zod 스키마 모음
+│   │   └── response.ts     # API 응답 헬퍼 (success, error)
+│   ├── env.ts              # 환경 변수 Zod 검증
+│   ├── session.ts          # 쿠키 기반 세션 관리
 │   └── utils.ts            # 유틸리티 함수
 ├── stores/
 │   ├── workshop.ts         # 워크샵 상태 (Zustand)
@@ -113,32 +153,62 @@ src/
 │   └── vote.ts             # 투표 상태
 └── types/
     ├── workshop.ts         # 워크샵 관련 타입
+    ├── project.ts          # 프로젝트 타입
     ├── note.ts             # 포스트잇 타입
     ├── cluster.ts          # 클러스터 타입
     ├── vote.ts             # 투표 타입
     ├── task.ts             # AX 과제 타입
     └── prd.ts              # PRD 타입
+
+Dockerfile                  # 멀티스테이지 빌드 (standalone output)
+.dockerignore
+next.config.ts              # output: 'standalone' 설정
+supabase/
+  └── migrations/         # SQL 마이그레이션 파일
 ```
 
 ## 데이터 모델
+
+### projects (프로젝트)
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | uuid (PK) | 프로젝트 고유 ID |
+| name | text | 프로젝트명 (예: "삼성전자 DX사업부") |
+| description | text (nullable) | 프로젝트 설명 |
+| facilitator_id | uuid (FK) | Supabase Auth user ID (퍼실리테이터) |
+| created_at | timestamptz | 생성 시각 (DEFAULT now()) |
+| updated_at | timestamptz | 수정 시각 (트리거로 자동 갱신) |
 
 ### workshops
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | uuid (PK) | 워크샵 고유 ID |
+| project_id | uuid (FK) | 프로젝트 참조 |
 | title | text | 워크샵 제목 |
 | invite_code | varchar(6) | 초대 코드 (유니크) |
-| current_stage | enum | 현재 단계 (gather/cluster/vote/derive/generate) |
-| facilitator_name | text | 퍼실리테이터 이름 |
-| settings | jsonb | 워크샵 설정 (익명 여부, 투표 수 등) |
-| created_at | timestamptz | 생성 시각 |
-| updated_at | timestamptz | 수정 시각 |
+| current_stage | enum | 현재 단계 (gather/cluster/vote/derive/generate/completed) |
+| facilitator_id | uuid (FK) | Supabase Auth user ID (퍼실리테이터) |
+| settings | jsonb | 워크샵 설정 (아래 settings 스키마 참조) |
+| is_processing | boolean | AI 처리 중 플래그 (중복 호출 방지) |
+| created_at | timestamptz | 생성 시각 (DEFAULT now()) |
+| updated_at | timestamptz | 수정 시각 (트리거로 자동 갱신) |
+
+#### settings jsonb 스키마
+```typescript
+interface WorkshopSettings {
+  anonymous: boolean          // 익명 모드 (기본 false)
+  votes_per_person: number    // 1인당 투표 수 (기본 3, 범위 1~10)
+  max_participants: number    // 최대 참가자 (기본 20)
+  results_visible: boolean    // 투표 결과 공개 여부 (기본 false)
+}
+```
 
 ### participants
 | 컬럼 | 타입 | 설명 |
 |------|------|------|
 | id | uuid (PK) | 참가자 고유 ID |
 | workshop_id | uuid (FK) | 워크샵 참조 |
+| user_id | uuid (FK, nullable) | Supabase Auth user ID (퍼실리테이터만 값 있음) |
 | name | text | 참가자 이름 |
 | role | text | 역할/팀 (선택) |
 | is_facilitator | boolean | 퍼실리테이터 여부 |
@@ -207,6 +277,7 @@ src/
 ### ERD 관계
 
 ```
+projects 1──N workshops    (workshop.project_id → projects.id)
 workshops 1──N participants
 workshops 1──N notes
 workshops 1──N clusters
@@ -218,9 +289,100 @@ participants 1──N notes     (note.participant_id → participants.id)
 participants 1──N votes     (vote.participant_id → participants.id)
 ```
 
+## API 응답 표준
+
+모든 API Route는 다음 형식을 준수한다:
+
+```typescript
+// 성공 응답
+interface SuccessResponse<T> {
+  data: T
+}
+
+// 에러 응답
+interface ErrorResponse {
+  error: {
+    code: string      // 예: 'VALIDATION_ERROR', 'UNAUTHORIZED', 'NOT_FOUND'
+    message: string   // 사용자에게 보여줄 수 있는 메시지
+  }
+}
+```
+
+HTTP 상태 코드: 200(성공), 400(입력 오류/검증 실패), 403(권한 없음), 404(미존재), 409(충돌/중복), 500(서버 에러)
+
+## API 미들웨어 패턴
+
+모든 API Route에서 반복되는 세션 검증/권한 확인을 공통 헬퍼로 추출한다:
+
+```typescript
+// src/lib/api/middleware.ts
+
+// 세션 검증: 참석자 쿠키 세션 또는 퍼실리테이터 Supabase Auth 세션 모두 검증
+async function withAuth(
+  req: NextRequest,
+  handler: (ctx: AuthContext) => Promise<NextResponse>
+): Promise<NextResponse>
+
+// 퍼실리테이터 검증: Supabase Auth 세션만 검증 (is_facilitator + user_id 확인)
+async function withFacilitator(
+  req: NextRequest,
+  handler: (ctx: FacilitatorContext) => Promise<NextResponse>
+): Promise<NextResponse>
+```
+
+## 요청 검증 (Zod)
+
+모든 API Route의 요청 body는 Zod 스키마로 검증한다:
+
+```typescript
+// src/lib/api/validators.ts
+import { z } from 'zod'
+
+export const createWorkshopSchema = z.object({
+  project_id: z.string().uuid(),
+  title: z.string().min(1).max(100),
+  settings: z.object({
+    anonymous: z.boolean().optional(),
+    votes_per_person: z.number().int().min(1).max(10).optional(),
+    max_participants: z.number().int().min(2).max(20).optional(),
+    results_visible: z.boolean().optional(),
+  }).optional(),
+})
+
+export const createNoteSchema = z.object({
+  workshop_id: z.string().uuid(),
+  id: z.string().uuid().optional(), // tldraw shape.id = note.id 매핑용
+  content: z.string().min(1).max(200),
+  color: z.enum(['red', 'blue', 'green', 'yellow']),
+  position_x: z.number(),
+  position_y: z.number(),
+})
+// ... 나머지 API도 동일 패턴
+```
+
+## RLS 및 API 권한 경계
+
+참석자(guest)는 Supabase Auth JWT가 아니라 signed HTTP-only 쿠키를 사용한다. 따라서 권한 판단의 최종 책임은 API Route 미들웨어에 둔다.
+
+- 모든 INSERT/UPDATE/DELETE는 API Route에서 service role client로 수행한다.
+- 브라우저 anon key는 공개 가능하지만 직접 테이블 쓰기 권한을 갖지 않는다.
+- 초기 데이터 조회와 권한 민감 조회는 API Route가 `withAuth`/`withFacilitator`로 signed cookie 또는 Supabase Auth 세션을 검증한 뒤 반환한다.
+- Supabase Realtime/Yjs에 필요한 SELECT 범위는 RLS에서 최소 허용하되, 민감한 데이터 접근 정책은 API 계층에서 다시 검증한다.
+- service role key는 서버 전용이며 클라이언트 번들에 절대 포함하지 않는다.
+
 ## 실시간 동기화 전략
 
-Supabase Realtime (PostgreSQL CDC 기반)을 사용한다.
+이중 레이어 동기화:
+1. **Gather 단계 (화이트보드)**: tldraw + Yjs CRDT로 캔버스 실시간 동기화. y-supabase 어댑터가 Yjs 문서를 Supabase에 영속화.
+2. **나머지 단계**: Supabase Realtime (PostgreSQL CDC 기반)으로 DB 변경 전파.
+
+### tldraw ↔ DB 이중 저장 (Gather 단계)
+
+tldraw 캔버스에서 포스트잇 shape를 생성/수정/삭제하면, `notes` 테이블에도 동기화:
+- shape.id = note.id 로 매핑
+- tldraw 이벤트 핸들러(`onShapeCreate`, `onShapeChange`, `onShapeDelete`)에서 API 호출
+- AI 파이프라인은 `notes` 테이블의 정규화된 데이터를 사용
+- Cluster 이후 단계에서 AI 결과를 tldraw 캔버스에 shape로 반영
 
 ### 구독 채널
 
@@ -234,25 +396,50 @@ Supabase Realtime (PostgreSQL CDC 기반)을 사용한다.
 
 ### 동기화 흐름
 
+#### Gather 단계 (tldraw + Yjs)
 ```
-참석자 A (포스트잇 작성)
-    → API Route (POST /api/notes)
-        → Supabase INSERT
+참석자 A (tldraw에서 포스트잇 shape 생성)
+    → Yjs CRDT 로컬 업데이트
+    → y-supabase가 Yjs 변경사항을 Supabase Realtime으로 전파
+    → 모든 구독 클라이언트 (B, C, ...) Yjs 문서 동기화 → tldraw 리렌더링
+    + 동시에 API Route (POST /api/notes) → notes 테이블 INSERT
+```
+
+#### 나머지 단계 (Supabase Realtime CDC)
+```
+퍼실리테이터 (AI 트리거 또는 데이터 수정)
+    → API Route
+        → Supabase INSERT/UPDATE
             → Realtime CDC 이벤트 발행
-                → 모든 구독 클라이언트 (참석자 B, C, ...) 수신
-                    → Zustand 스토어 업데이트
-                        → React 리렌더링
+                → 모든 구독 클라이언트 수신
+                    → Zustand 스토어 업데이트 → React 리렌더링
 ```
 
 ## API 설계
 
+### 인증 (퍼실리테이터)
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | /api/auth/signup | 퍼실리테이터 회원가입 (Supabase Auth) |
+| POST | /api/auth/login | 퍼실리테이터 로그인 (Supabase Auth) |
+| POST | /api/auth/logout | 퍼실리테이터 로그아웃 |
+
+### 프로젝트
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | /api/projects | 프로젝트 생성 (withFacilitator) |
+| GET | /api/projects | 퍼실리테이터 프로젝트 목록 (withFacilitator) |
+| PATCH | /api/projects/:id | 프로젝트 수정 (withFacilitator) |
+| DELETE | /api/projects/:id | 프로젝트 삭제 (withFacilitator, 소속 워크샵 없을 때만) |
+
 ### 워크샵
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| POST | /api/workshops | 워크샵 생성 |
-| GET | /api/workshops/:id | 워크샵 조회 |
-| PATCH | /api/workshops/:id | 워크샵 수정 (단계 전환 포함) |
-| POST | /api/workshops/join | 초대 코드로 참여 |
+| POST | /api/workshops | 워크샵 생성 (withFacilitator) |
+| GET | /api/workshops?project_id=:id | 프로젝트 내 워크샵 목록 (withFacilitator) |
+| GET | /api/workshops/:id | 워크샵 조회 (withAuth) |
+| PATCH | /api/workshops/:id | 워크샵 수정 (withFacilitator) |
+| POST | /api/workshops/join | 초대 코드로 참여 (게스트) |
 
 ### 포스트잇
 | Method | Endpoint | 설명 |
@@ -301,8 +488,10 @@ Supabase Realtime (PostgreSQL CDC 기반)을 사용한다.
 - **API**: Azure OpenAI (GPT-4o)
 - **JSON Mode**: 모든 AI 호출은 structured output (JSON) 사용
 - **서버사이드 전용**: 클라이언트에서 직접 호출하지 않음
-- **타임아웃**: 60초
-- **재시도**: 최대 2회 (exponential backoff)
+- **타임아웃**: 클러스터링 30초, AX 과제 도출 30초, PRD 생성 60초
+- **재시도**: 최대 2회 (1초, 2초 exponential backoff)
+- **토큰 가드레일**: 클러스터링 2000, AX 과제 도출 3000, PRD 생성 8000
+- **응답 검증**: `src/lib/ai/schemas.ts`의 Zod 스키마로 파싱하고, 각 호출별 사후 무결성 검증을 통과해야 DB에 반영한다.
 
 ### 클러스터링 파이프라인
 
@@ -356,9 +545,9 @@ DB 반영: ax_tasks 테이블 INSERT
   - System: "프로덕트 매니저로서 AX 과제를 기반으로 PRD를 작성하라"
   - User: 과제 목록 + 핵심 기능 + 워크샵 맥락
   ↓
-Azure OpenAI 호출
+Azure OpenAI 호출 (JSON mode)
   ↓
-응답: PRD 본문 (Markdown)
+응답: { content: "PRD 본문 Markdown" }
   ↓
 DB 반영: prds 테이블 INSERT
 ```
@@ -398,3 +587,6 @@ voteStore
 - **Client Components는 인터랙션 전용** — 실시간 구독, 사용자 입력, 상태 변경이 필요한 곳만 'use client'
 - **Optimistic Updates** — 포스트잇 생성/수정 시 API 응답을 기다리지 않고 즉시 UI 반영, 실패 시 롤백
 - **Realtime 구독은 레이아웃 레벨** — workshop/[id]/layout.tsx에서 한 번만 구독, 하위 페이지에서 스토어 참조
+- **AI 중복 호출 방지** — workshops.is_processing 플래그로 서버사이드 락, 클라이언트 버튼 disabled 병행
+- **DB timestamps 자동화** — created_at은 DEFAULT now(), updated_at은 트리거로 자동 갱신
+- **Zod 검증** — 모든 API body는 Zod 스키마로 검증, 실패 시 400 + 표준 에러 응답

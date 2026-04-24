@@ -1,0 +1,85 @@
+{
+  "id": "nemotron-persona-ko-kr",
+  "name": "Nemotron Persona KO-KR Dataset",
+  "format": "parquet",
+  "registered_path": "datasets/nemotron-persona-ko-kr/ko_KR.parquet",
+  "source_path": "/Users/youngmokoo/Documents/nemotron-persona-ko-kr-dataset/ko_KR.parquet",
+  "registration_mode": "symlink",
+  "file_size_bytes": 2854775231,
+  "file_size_gib": 2.659,
+  "rows": 1000000,
+  "columns": 51,
+  "row_groups": 72,
+  "compression": "SNAPPY",
+  "created_by": "parquet-cpp-arrow version 23.0.1",
+  "schema_groups": {
+    "identifier_basic_profile": [
+      "uuid",
+      "first_name",
+      "middle_name",
+      "last_name",
+      "sex",
+      "age"
+    ],
+    "location": [
+      "street_number",
+      "street_name",
+      "unit",
+      "city",
+      "region",
+      "district",
+      "postcode",
+      "country"
+    ],
+    "socioeconomic_profile": [
+      "marital_status",
+      "education_level",
+      "bachelors_field",
+      "occupation",
+      "family_type",
+      "housing_type",
+      "housing_tenure",
+      "military_status",
+      "economic_activity_status",
+      "income_bracket"
+    ],
+    "health_lifestyle": [
+      "bmi_status",
+      "blood_pressure_status",
+      "blood_sugar_status",
+      "waist_status",
+      "smoking_status",
+      "drinking_status"
+    ],
+    "personality": [
+      "openness",
+      "conscientiousness",
+      "extraversion",
+      "agreeableness",
+      "neuroticism"
+    ],
+    "persona_text": [
+      "cultural_background",
+      "skills_and_expertise",
+      "skills_and_expertise_list",
+      "career_goals_and_ambitions",
+      "hobbies_and_interests",
+      "hobbies_and_interests_list",
+      "professional_persona",
+      "finance_persona",
+      "healthcare_persona",
+      "sports_persona",
+      "arts_persona",
+      "travel_persona",
+      "culinary_persona",
+      "persona",
+      "detailed_persona",
+      "family_persona"
+    ]
+  },
+  "notes": [
+    "Large raw file is registered through a symlink to avoid duplicating 2.66 GiB inside the project.",
+    "Treat this dataset as sensitive-like because it contains personal-looking profile fields.",
+    "Use a Parquet reader such as pyarrow, duckdb, or polars before extracting fixtures."
+  ]
+}

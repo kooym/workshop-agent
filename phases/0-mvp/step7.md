@@ -7,6 +7,11 @@
 - `/docs/ARCHITECTURE.md` — AI 파이프라인 (AX 과제 도출), ax_tasks API
 - `/docs/PRD.md` — Stage 4: AX 과제 도출 (Derive) 전체 기능
 - `/docs/UI_GUIDE.md` — 전반적인 카드/리스트 디자인 패턴
+- `/docs/SPEC_AUDIT.md` — AI 응답 사후 검증, 단계 잠금 결정
+- `/docs/MODULE_MAP.md`
+- `/docs/modules/05-ai-pipeline.md`
+- `/docs/modules/06-voting-prioritization.md`
+- `/docs/modules/07-tasks-prd-artifacts.md`
 
 이전 step에서 만들어진 코드를 꼼꼼히 읽고, 설계 의도를 이해한 뒤 작업하라:
 
@@ -15,10 +20,14 @@
 - `/src/lib/ai/schemas.ts` — 스키마 패턴 참조
 - `/src/app/api/votes/results/route.ts` — 투표 결과 조회 패턴
 - `/src/types/task.ts`
+- `/src/lib/api/middleware.ts`
+- `/src/lib/api/validators.ts`
 
 ## 작업
 
 투표 결과 상위 pain point를 기반으로 AI가 AX 과제를 도출하는 기능을 구현하라. Stage 4(과제 도출 단계)의 핵심 기능이다.
+
+이 step은 새 AI/API 기능이므로 테스트를 먼저 작성한다. Azure OpenAI는 mock하고, top_n 검증, stage lock, 빈 결과, 잘못된 cluster 매핑, is_processing 복구를 구현 전에 테스트로 고정하라.
 
 ### 1. AX 과제 도출 프롬프트
 
@@ -47,41 +56,43 @@ export function buildDerivationPrompt(input: {
 
 `src/lib/ai/schemas.ts`에 추가:
 
-```typescript
-export interface DerivationResponse {
-  tasks: {
-    title: string
-    description: string
-    pain_point_cluster_names: string[]
-    core_features: string[]
-    sub_features: string[]
-    expected_impact: string
-    difficulty: 'low' | 'medium' | 'high'
-  }[]
-}
-```
+Zod 스키마를 정의하고 `z.infer`로 타입을 추론하라. 별도 interface를 중복 정의하지 마라.
+
+검증 조건:
+- `tasks`는 1개 이상
+- `title`은 1~100자
+- `description`은 1~500자
+- `core_features`는 1개 이상
+- `difficulty`는 `low | medium | high`
+- 연결된 cluster_id 또는 cluster name은 실제 입력 클러스터와 매핑 가능해야 한다.
 
 ### 3. AI AX 과제 도출 API Route
 
 `src/app/api/ai/derive/route.ts` — POST 핸들러:
 
-- 세션 검증: **퍼실리테이터만** 호출 가능
-- 요청: `{ workshop_id, top_n?: number }` (기본 top_n = 5)
+- `withFacilitator` 미들웨어로 권한 검증: **퍼실리테이터만** 호출 가능
+- current_stage가 `derive`가 아니면 409 반환
+- **AI 중복 호출 방지**: workshops.is_processing이 true이면 409 에러. 호출 시작 시 is_processing=true, 완료/실패 시 is_processing=false (try/finally)
+- 요청 body를 Zod 검증: `{ workshop_id, top_n?: number }` (기본 top_n = 5)
 - 투표 결과 상위 N개 클러스터 + 해당 포스트잇 조회
-- buildDerivationPrompt() → Azure OpenAI 호출 → 응답 파싱
+- buildDerivationPrompt() → Azure OpenAI JSON mode 호출(max_tokens 3000, timeout 30초) → 응답 파싱/검증
 - DB 반영:
   1. 기존 ax_tasks 삭제 (해당 workshop의)
   2. 새 ax_tasks INSERT (pain_points에 연결된 클러스터/포스트잇 ID 매핑)
-- 응답: 생성된 ax_tasks 배열
+- 응답: `{ data: tasks }`
 
 ### 4. AX 과제 관리 API
 
 `src/app/api/tasks/route.ts` — GET `?workshop_id=:id`:
+- `withAuth` 미들웨어로 세션 검증
+- query를 Zod로 검증
 - 워크샵의 AX 과제 목록 조회
 
 `src/app/api/tasks/[id]/route.ts` — PATCH:
-- 퍼실리테이터만 수정 가능
-- 수정 가능 필드: `title`, `description`, `core_features`, `sub_features`, `priority`, `difficulty`
+- `withFacilitator` 미들웨어로 권한 검증
+- 요청 body를 Zod 검증
+- current_stage가 `derive`일 때만 편집 가능. generate 이후에는 읽기 전용.
+- 수정 가능 필드: `title` (max 100자), `description` (max 500자), `core_features`, `sub_features`, `priority`, `difficulty`
 
 ### 5. AX 과제 UI 컴포넌트
 
@@ -89,6 +100,7 @@ export interface DerivationResponse {
 - AI 도출 전: "퍼실리테이터가 AX 과제 도출을 시작할 때까지 대기 중" 메시지
 - 퍼실리테이터에게만 "AX 과제 도출" 버튼 표시
 - 로딩 중: pulse 애니메이션
+- 참석자에게는 is_processing=true일 때 "퍼실리테이터가 AI를 실행 중입니다" 대기 화면 표시
 - 과제 카드 목록 렌더링
 
 `src/components/derive/TaskCard.tsx` — 개별 과제 카드:
@@ -108,14 +120,18 @@ export interface DerivationResponse {
 ## Acceptance Criteria
 
 ```bash
-npm run build   # 컴파일 에러 없음
 npm run lint    # lint 에러 없음
+npm run typecheck # 타입 검사 통과
+npm run test    # 테스트 통과
+npm run build   # 컴파일 에러 없음
 ```
 
 - AI 과제 도출 API가 투표 상위 pain point를 기반으로 과제를 생성하는지 확인
 - 과제에 연결된 pain point 매핑이 올바른지 확인
+- AI 응답이 빈 tasks 또는 유효하지 않은 cluster 매핑을 반환하면 API가 실패하고 is_processing이 false로 복구되는지 확인
 - 퍼실리테이터가 과제를 편집할 수 있는지 확인
 - 비퍼실리테이터가 과제 도출을 트리거하면 403이 반환되는지 확인
+- generate 단계 이후 과제 편집이 차단되는지 확인
 
 ## 금지사항
 
