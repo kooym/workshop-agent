@@ -3,8 +3,14 @@
   "name": "Nemotron Persona KO-KR Dataset",
   "format": "parquet",
   "registered_path": "datasets/nemotron-persona-ko-kr/ko_KR.parquet",
-  "source_path": "/Users/youngmokoo/Documents/nemotron-persona-ko-kr-dataset/ko_KR.parquet",
-  "registration_mode": "symlink",
+  "source_path": null,
+  "source_path_note": "OS별로 원본 parquet 파일 위치가 다름. 아래 setup 참고",
+  "registration_mode": "external",
+  "setup": {
+    "description": "원본 parquet 파일을 직접 다운로드하거나 로컬 경로에서 symlink/복사하여 registered_path에 배치한다.",
+    "windows": "mklink datasets\\nemotron-persona-ko-kr\\ko_KR.parquet <원본-경로>",
+    "macos_linux": "ln -s <원본-경로> datasets/nemotron-persona-ko-kr/ko_KR.parquet"
+  },
   "file_size_bytes": 2854775231,
   "file_size_gib": 2.659,
   "rows": 1000000,

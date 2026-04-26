@@ -27,15 +27,15 @@
 
 ## 계약
 
-- vote 단계에서만 투표 생성/취소 가능하다.
+- vote 단계에서만 투표 생성/취소 가능하다. 단, 자유 네비게이션에서 `current_stage` ≥ vote이면 투표 가능하며, 이후 단계에서 투표 변경 시 design 이하 stale 전파.
 - participant별 투표 수는 `workshops.settings.votes_per_person`을 초과할 수 없다.
+- `vote_mode`: 'cluster' (클러스터 단위 투표) 또는 'note' (개별 노트 단위 투표). 기본값 'cluster'. **MVP 범위**.
 - 동일 대상 중복 투표는 DB unique constraint와 API에서 방어한다.
 - `results_visible=false`이면 투표 진행 중 참석자와 퍼실리테이터 모두 결과 수치를 보지 않는다.
-- `vote -> derive`는 퍼실리테이터의 투표 마감 확인으로 전환되며 최소 1표는 필수 조건이 아니다.
+- `vote -> design`은 퍼실리테이터의 투표 마감 확인으로 전환되며 최소 1표는 필수 조건이 아니다.
 
 ## 확장 포인트
 
-- note-level vs cluster-level voting mode
 - weighted voting
 - vote timer
 - anonymous vote mode

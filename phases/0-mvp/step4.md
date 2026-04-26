@@ -6,7 +6,7 @@
 
 - `/docs/ARCHITECTURE.md` — tldraw/Yjs 동기화 전략, 포스트잇 API, boardStore 패턴
 - `/docs/ADR.md` — ADR-012 (tldraw 화이트보드 선택)
-- `/docs/PRD.md` — Stage 1: 수집 (Gather) 전체 기능
+- `/docs/PRD.md` — Stage 2: 수집 (Gather) 전체 기능
 - `/docs/UI_GUIDE.md` — StickyNoteShape, 화이트보드 레이아웃, 포스트잇 색상
 - `/docs/SPEC_AUDIT.md` — tldraw/Yjs와 DB 이중 저장 정합성 결정
 - `/docs/MODULE_MAP.md`
@@ -25,7 +25,7 @@
 
 ## 작업
 
-tldraw + Yjs 기반 실시간 포스트잇 화이트보드를 구현하라. Stage 1(수집 단계)의 핵심 기능이다.
+tldraw + Yjs 기반 실시간 포스트잇 화이트보드를 구현하라. Stage 2(수집 단계)의 핵심 기능이다.
 
 이 step은 새 기능 구현이므로 테스트를 먼저 작성한다. API stage lock, 소유권 검증, boardStore의 Realtime 동기화 동작을 구현 전에 테스트로 고정하라.
 
@@ -35,30 +35,63 @@ Step 0에서 설치한 `tldraw`, `yjs`, `y-supabase`를 사용한다. 누락되�
 
 `y-supabase`는 안정성 리스크가 있으므로 직접 사용부를 여러 파일에 흩뿌리지 말고 provider adapter 모듈로 감싼다. 향후 다른 Yjs/Supabase provider로 교체할 수 있어야 한다.
 
+`src/lib/yjs/provider.ts` — Yjs provider adapter:
+```ts
+import * as Y from 'yjs'
+import { SupabaseProvider } from 'y-supabase'
+import { createBrowserClient } from '@/lib/supabase/client'
+
+export function createYjsProvider(workshopId: string) {
+  const yDoc = new Y.Doc()
+  const supabase = createBrowserClient()
+  
+  const provider = new SupabaseProvider(yDoc, supabase, {
+    channel: `yjs:${workshopId}`,    // 워크샵별 고유 채널
+    tableName: 'yjs_documents',       // y-supabase 내부 저장 테이블 (자동 생성)
+    id: workshopId,                   // 문서 식별자
+  })
+
+  return { yDoc, provider }
+}
+
+export function destroyYjsProvider(provider: SupabaseProvider) {
+  provider.destroy()  // WebSocket 연결 해제 + 클린업
+}
+```
+
+WhiteboardCanvas에서 사용:
+```tsx
+// src/components/board/WhiteboardCanvas.tsx 내부
+const { yDoc, provider } = useMemo(() => createYjsProvider(workshopId), [workshopId])
+
+useEffect(() => {
+  return () => destroyYjsProvider(provider)
+}, [provider])
+```
+
 ### 2. 포스트잇 API Routes
 
 `src/app/api/notes/route.ts`:
 
 - **GET** `?workshop_id=:id` — 워크샵의 모든 포스트잇 조회. query를 Zod로 검증하고 `withAuth` 미들웨어로 세션을 검증한다.
-- **POST** — 포스트잇 생성. 요청 body를 `createNoteSchema`로 Zod 검증: `{ workshop_id, id?, content, color, position_x, position_y }`.
+- **POST** — 포스트잇 생성. 요청 body를 `createNoteSchema`로 Zod 검증: `{ workshop_id, id?, content, color, position_x, position_y, process_step_id? }`.
   - `id`는 tldraw shape.id = note.id 매핑을 위해 클라이언트가 생성한 UUID를 허용한다. 없으면 서버에서 생성한다.
+  - `process_step_id`는 선택사항. 제공된 경우 해당 워크샵의 유효한 프로세스 단계 ID인지 검증한다. **태깅 시점**: 포스트잇 생성 시 하단 툴바 드롭다운에서 프로세스 노드를 선택하거나, 생성 후 포스트잇을 클릭하여 편집 모드에서 태깅을 변경/해제할 수 있다 (PRD F20 참조).
   - participant_id는 세션에서 추출한다.
   - 현재 워크샵 stage가 `gather`가 아니면 403 또는 409를 반환한다.
   - 워크샵당 포스트잇 200개 제한을 INSERT 전 트랜잭션으로 검증한다.
 
 `src/app/api/notes/[id]/route.ts`:
 
-- **PATCH** — 포스트잇 수정. 수정 가능 필드: `content`, `color`, `position_x`, `position_y`.
+- **PATCH** — 포스트잇 수정. 수정 가능 필드: `content`, `color`, `position_x`, `position_y`, `process_step_id`.
   - gather 단계에서만 허용한다.
+  - `process_step_id` 변경 시 해당 워크샵의 유효한 프로세스 단계 ID인지 검증한다. null로 설정하여 태그 해제도 허용.
   - 원래 작성자만 수정 가능하다. 퍼실리테이터도 타인의 포스트잇 수정은 불가하다.
 - **DELETE** — 포스트잇 삭제.
   - gather 단계에서만 허용한다.
   - 작성자 본인 또는 퍼실리테이터만 삭제 가능하다.
 
-`src/app/api/notes/[id]/react/route.ts`:
-
-- **POST** — 좋아요 리액션. notes.reactions 카운트 +1.
-- 중복 리액션 방지는 MVP에서 생략하지만, gather 이후에도 반응을 허용할지 여부를 API에서 명확히 결정하라. 기본값은 gather 단계에서만 허용한다.
+**포스트잇 수정/삭제 시 stale 전파**: `current_stage > 'gather'`이면 `propagateStale(workshopId, 'gather')` 호출.
 
 ### 3. Zustand 보드 스토어
 
@@ -76,7 +109,6 @@ interface BoardStore {
   addNote(note: Note): void
   updateNote(id: string, data: Partial<Note>): void
   removeNote(id: string): void
-  incrementReaction(id: string): void
 }
 ```
 
@@ -85,6 +117,30 @@ Optimistic Update 규칙:
 - API 성공 전에는 `pendingNoteIds`로 자체 Realtime 이벤트 중복 반영을 막는다.
 - API 실패 시 tldraw shape와 boardStore note를 모두 롤백하고 Toast 에러를 표시한다.
 - DB는 AI 파이프라인의 정규 데이터 소스이므로, tldraw shape만 있고 notes row가 없는 상태를 방치하지 마라.
+
+**DB 쓰기 재시도 프로토콜** (클라이언트사이드):
+```typescript
+async function syncNoteToDb(action: 'POST' | 'PATCH' | 'DELETE', data: any, retries = 3): Promise<boolean> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await fetch(url, { method: action, body: JSON.stringify(data) })
+      if (res.ok) return true
+      if (res.status === 400 || res.status === 403) return false  // 즉시 실패 (재시도 불필요)
+      // 500, 네트워크 에러: 재시도
+    } catch (e) { /* 네트워크 에러: 재시도 */ }
+    if (attempt < retries - 1) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))  // 1s, 2s, 4s
+  }
+  return false  // 3회 실패: Toast 에러 + Yjs 상태 유지 (다음 수정 시 재동기화 시도)
+}
+```
+- 재시도 대상: 네트워크 에러, 500 서버 에러
+- 즉시 실패 (재시도 없음): 400 (입력 오류), 403 (권한 없음), 409 (중복)
+- 3회 모두 실패 시: Toast "포스트잇 저장에 실패했습니다. 다음 수정 시 재시도됩니다" + tldraw shape는 유지 (Yjs 상태 보존)
+
+**Canonical 검증 (cluster 전환 전)**:
+- "다음 단계로" (gather→cluster) 클릭 시 API에서 검증: `SELECT COUNT(*) FROM notes WHERE workshop_id = :id` vs 클라이언트의 Yjs shape 개수
+- 불일치 시 409 반환 + Toast "포스트잇 동기화 불일치. 새로고침 후 다시 시도해주세요" + 전환 차단
+- 전환 전 `pendingNoteIds`가 비어있어야 함 (모든 API 호출 완료 대기)
 
 ### 4. Realtime/Yjs 구독 추가
 
@@ -96,6 +152,20 @@ Optimistic Update 규칙:
 
 Yjs 문서 동기화는 WhiteboardCanvas 내부에서 y-supabase 어댑터로 설정한다:
 - 채널 이름은 워크샵 id 기반으로 안정적으로 생성한다.
+
+**Yjs ↔ DB 재구성 (워크샵 재접속 시)**:
+- 페이지 로드 시 `GET /api/notes?workshop_id=:id`로 notes 테이블 데이터를 정본(canonical)으로 fetch
+- Yjs 문서가 비어있거나 y-supabase 어댑터가 아직 동기화되지 않은 상태이면, notes 데이터로 tldraw shape를 재구성:
+  ```
+  for (note of dbNotes) {
+    if (!yDoc.getMap('shapes').has(note.id)) {
+      // DB에는 있지만 Yjs에 없는 shape → tldraw에 추가
+      editor.createShape({ id: note.id, type: 'sticky', ... })
+    }
+  }
+  ```
+- Yjs에는 있지만 DB에 없는 shape → 삭제 (DB가 정본)
+- y-supabase 어댑터 연결 후 Yjs가 자동 동기화하면, 위 재구성은 초기 로드 시에만 실행 (이후는 Yjs CRDT가 관리)
 - Yjs provider cleanup을 컴포넌트 언마운트에서 수행한다.
 - WebSocket 재연결 후 notes API 재조회로 DB 정규 데이터와 보드 상태를 다시 맞춘다.
 
@@ -125,7 +195,7 @@ Yjs 문서 동기화는 WhiteboardCanvas 내부에서 y-supabase 어댑터로 �
 - notes가 없을 때 EmptyState를 표시한다.
 - tldraw 캔버스가 비어 보이지 않도록 초기 viewport와 기본 안내 상태를 안정적으로 설정한다.
 
-### 6. Stage 1 페이지 연결
+### 6. Stage 2 페이지 연결
 
 `src/app/workshop/[id]/board/page.tsx` 또는 메인 `page.tsx`의 gather 분기:
 - 서버 컴포넌트에서 초기 notes fetch

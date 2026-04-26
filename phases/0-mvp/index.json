@@ -2,15 +2,71 @@
   "project": "Workshop Agent",
   "phase": "mvp",
   "steps": [
-    { "step": 0, "name": "project-setup", "status": "pending" },
-    { "step": 1, "name": "db-schema", "status": "pending" },
-    { "step": 2, "name": "auth-invite", "status": "pending" },
-    { "step": 3, "name": "workshop-crud", "status": "pending" },
-    { "step": 4, "name": "realtime-board", "status": "pending" },
-    { "step": 5, "name": "ai-clustering", "status": "pending" },
-    { "step": 6, "name": "dot-voting", "status": "pending" },
-    { "step": 7, "name": "ax-derivation", "status": "pending" },
-    { "step": 8, "name": "prd-generation", "status": "pending" },
+    {
+      "step": 0,
+      "name": "project-setup",
+      "status": "completed",
+      "started_at": "2026-04-26T15:19:30+09:00",
+      "completed_at": "2026-04-26T15:19:30+09:00",
+      "summary": "Next.js 15 foundation, env validation, Supabase proxy/client scaffold, Vitest, Dockerfile, health endpoint, and landing page added.",
+      "known_issues": "Docker CLI is not installed or not on PATH, so `docker build -t workshop-agent .` was not verified. Current Node is v24.14.1 while the project standard is Node 20 LTS."
+    },
+    {
+      "step": 1,
+      "name": "db-schema",
+      "status": "completed",
+      "started_at": "2026-04-26T15:26:00+09:00",
+      "completed_at": "2026-04-26T15:49:21+09:00",
+      "summary": "Initial Supabase schema, guarded seed data, manual domain/Supabase types, and schema coverage tests added.",
+      "known_issues": "`npx supabase db reset` could not complete because Docker Desktop/daemon is unavailable on this machine. SQL was statically verified by tests, but local PostgreSQL application remains unverified until Docker is available."
+    },
+    {
+      "step": 2,
+      "name": "auth-invite",
+      "status": "completed",
+      "started_at": "2026-04-26T15:50:00+09:00",
+      "completed_at": "2026-04-26T16:07:06+09:00",
+      "summary": "Facilitator auth APIs/UI, signed participant sessions, rate limiting, project/workshop APIs, invite preview/join flow, dashboard screens, workshop shell, and security/unit tests added.",
+      "known_issues": "`npx supabase db reset` still cannot run because Docker Desktop/daemon is unavailable. The join RPC migration is covered by static tests but has not been applied to a local PostgreSQL instance."
+    },
+    {
+      "step": 3,
+      "name": "workshop-crud",
+      "status": "completed",
+      "started_at": "2026-04-26T21:05:00+09:00",
+      "completed_at": "2026-04-26T21:26:24+09:00",
+      "summary": "Workshop detail/update/delete APIs, stage transition rules, settings guards, stale dismissal, process graph CRUD APIs, editing lock APIs, Zustand workshop/process graph stores, Realtime provider, StageNav, ParticipantList, ErrorBoundary, and React Flow context shell added.",
+      "known_issues": "Supabase local db reset remains unverified because Docker Desktop/daemon is unavailable. Context graph UI is a functional shell; detailed node editing panels and auto-layout controls are deferred to later context-editor hardening."
+    },
+    {
+      "step": 4,
+      "name": "realtime-board",
+      "status": "completed",
+      "started_at": "2026-04-26T21:27:00+09:00",
+      "completed_at": "2026-04-26T21:43:00+09:00",
+      "summary": "Gather-stage notes APIs, note permission/stage-lock tests, boardStore Realtime sync, y-supabase/Yjs adapter, yjs_documents migration, tldraw canvas shell, sticky note toolbar/cards with optimistic DB sync, notes Realtime subscription, and gather-stage workshop UI integration added.",
+      "known_issues": "Supabase local db reset and multi-tab Yjs behavior remain unverified because Docker Desktop/daemon is unavailable. The current tldraw integration renders the canvas and overlays canonical DB-backed sticky notes; full custom tldraw shape serialization can be hardened later without changing the notes API contract."
+    },
+    {
+      "step": 5,
+      "name": "ai-clustering",
+      "status": "completed",
+      "started_at": "2026-04-26T21:50:00+09:00",
+      "completed_at": "2026-04-26T22:00:00+09:00",
+      "summary": "Azure OpenAI clustering client, clustering prompts, Zod AI response validation, retryable AI helper, processing stale-lock helper, /api/ai/cluster, clusters list/patch APIs, clusterStore, ClusterView/ClusterGroup UI, and clusters Realtime subscription added.",
+      "known_issues": "Live Azure OpenAI and Supabase DB application were not verified because this environment has restricted network access and Docker Desktop/daemon remains unavailable. AI behavior is covered with mocked completion tests and build-time integration checks."
+    },
+    {
+      "step": 6,
+      "name": "dot-voting",
+      "status": "completed",
+      "started_at": "2026-04-26T22:01:00+09:00",
+      "completed_at": "2026-04-26T22:07:00+09:00",
+      "summary": "Vote create/delete/list APIs, vote results and participation stats APIs, vote policy helpers/tests, voteStore, DotVoting/VotingCard/VoteResult UI, results reveal control, votes Realtime subscription, and vote-stage workshop UI integration added.",
+      "known_issues": "Realtime and DB constraints were not exercised against a live Supabase instance because Docker Desktop/daemon remains unavailable. Result visibility and vote aggregation are covered by unit tests and build-time integration."
+    },
+    { "step": 7, "name": "ax-design", "status": "pending" },
+    { "step": 8, "name": "output-generation", "status": "pending" },
     { "step": 9, "name": "stage-flow", "status": "pending" }
   ]
 }

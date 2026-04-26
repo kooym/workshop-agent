@@ -27,9 +27,23 @@
 | WP4 | Realtime tldraw board | M4 | M3, M1, M2, M8 | step4 |
 | WP5 | AI clustering | M5 | M4, M3, M8 | step5 |
 | WP6 | Dot voting | M6 | M2, M3, M8 | step6 |
-| WP7 | AX task derivation | M5 | M6, M7, M8 | step7 |
+| WP7 | AX task design | M5 | M6, M7, M8 | step7 |
 | WP8 | PRD generation and editing | M7 | M5, M8 | step8 |
 | WP9 | Stage flow integration | M2 | M1, M3, M4, M5, M6, M7, M8, M9 | step9 |
+
+### WP 교차 관심사 (모든 WP에 적용)
+
+다음 기능은 특정 WP에 국한되지 않고, 관련 WP 구현 시 함께 반영해야 한다:
+
+| 기능 | 소유 모듈 | 반영 시점 | 설명 |
+|------|----------|----------|------|
+| `propagateStale()` | M2 | WP5(cluster), WP7(design), WP8(PRD), WP9(report+flow) | 이전 단계 수정 시 하류 AI 산출물 `is_stale = true` 전파. `src/lib/api/stale.ts` |
+| `viewingStage` 이중 상태 | M2 | WP3(workshop shell), WP9(stage flow) | `current_stage`(DB) vs `viewingStage`(Zustand). StageNav 자유 네비게이션 |
+| `is_processing_since` 자동 복구 | M2/M5 | WP5(첫 AI 호출) | 5분 초과 stale lock 자동 해제 |
+| Rate Limiting | M1 | WP2(auth/join) | `/api/workshops/join` IP 10회/분, 인증 엔드포인트 IP 10회/분 |
+| API 표준 에러 코드 | M0 | WP1 또는 WP2 | `src/lib/api/response.ts`에 12개 상수 |
+| Stage Write Lock | M2 | WP3~WP9(각 API Route) | `current_stage` 기반 쓰기 허용 검증 |
+| Stale 배너 UI | M8 | WP5(cluster), WP7(design) | 퍼실리테이터: 재실행/유지 버튼, 참석자: 읽기 전용 경고 |
 
 ## WP0.1 Foundation Compatibility Hardening
 
@@ -40,7 +54,7 @@
 | Runtime lock | `.nvmrc`, `package.json.engines`, Next 15 pinning | Node 20 기준, `create-next-app@15`, `npm ls` 확인 |
 | Package reproducibility | `package-lock.json`, npm 기준 | `npm ci` 성공 |
 | Supabase SSR scaffold | `client.ts`, `server.ts`, `src/lib/supabase/proxy.ts`, root `proxy.ts` | browser/server client 분리, session refresh proxy 기준 반영 |
-| Env boundary | `src/lib/env.ts`, `.env.local.example` | server/public env 분리, publishable/anon key alias 정책 명시 |
+| Env boundary | `src/lib/env.ts`, `.env.example` | server/public env 분리, publishable/anon key alias 정책 명시 |
 | Docker baseline | `Dockerfile`, `.dockerignore`, `next.config.ts` | standalone output, static/public copy, port 3000 |
 | Health endpoint | `GET /api/health` | 인증 없이 200, external dependency 미호출 |
 | Secret audit | 검색 기준과 테스트 TODO | client path에 server secret 노출 없음 |

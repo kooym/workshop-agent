@@ -4,7 +4,7 @@
 
 ## 우선순위
 
-1. `AGENTS.md` / `CLAUDE.md`의 CRITICAL 규칙
+1. `CLAUDE.md`의 CRITICAL 규칙
 2. `docs/SPEC_AUDIT.md`
 3. `docs/MODULE_MAP.md`
 4. `docs/modules/*.md`
@@ -19,6 +19,8 @@
 | `ARCHITECTURE.md` | 시스템 구성, 디렉토리, 데이터 모델, API, 상태 관리 | 설계/구현 전 |
 | `ADR.md` | 주요 기술 선택과 트레이드오프 | 기술 변경 전 |
 | `UI_GUIDE.md` | 디자인 원칙, 화면 패턴, 컴포넌트 스타일 | UI 구현 전 |
+| `PROJECT_ANALYSIS.md` | 전체 프로젝트 현황, 개발 착수 가능성, 리스크, 사전 조건 | 개발 착수 판단 |
+| `DEVELOPMENT_ROADMAP.md` | phase/module 단위 전체 개발 로드맵과 게이트 | 개발 순서 확정 |
 | `SPEC_AUDIT.md` | 문서 간 충돌 분석과 최종 정합성 결정 | 구현 시작 전 |
 | `MODULE_MAP.md` | MECE 모듈 분해, 책임, 의존성, 확장성 체크 | 기능 추가/리팩터링 전 |
 | `FOUNDATION_ASSESSMENT.md` | Foundation Cluster 스코어링, 갭, 호환성 개선 계획 | 프로젝트 세팅/배포 기준 확정 전 |
@@ -27,6 +29,8 @@
 | `OPERATIONS.md` | 운영, 배포, 모니터링, 장애 대응, 데이터 관리 | 배포/운영 전 |
 
 ## 모듈 문서
+
+모듈 문서의 읽기 순서와 공통 섹션 구조는 `modules/README.md`를 참조한다.
 
 | 모듈 | 문서 | 소유 책임 |
 |------|------|----------|

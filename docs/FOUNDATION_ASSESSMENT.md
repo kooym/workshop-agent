@@ -47,14 +47,14 @@ Foundation Cluster는 M0 Platform Foundation과 M9 Quality & Operations를 묶�
 | 항목 | 보강 내용 | 예상 점수 |
 |------|----------|----------|
 | Runtime/Dependency compatibility | Next 15 pinning, Node 20 기준, tldraw 패키지명 정정 | 4/5 |
-| Env/Secret boundary | 기존 기준 유지, public/server env 분리 계획 명확화 | 4/5 |
+| Env/Secret boundary | 기존 기준 유지, `.env.example` 템플릿 추가, public/server env 분리 계획 명확화 | 4.5/5 |
 | Build/Docker reproducibility | Docker base/lockfile 기준 추가. 실제 Dockerfile은 구현 필요 | 3.5/5 |
-| Test/CI gates | AC와 smoke 기준 강화. CI 파일은 아직 미작성 | 3.5/5 |
-| Local DX | `.nvmrc`, engines, `npm ci`, package check 기준 추가 | 4/5 |
-| Observability/Ops | health/log/rollback 갭 명시. 구현은 아직 필요 | 3.5/5 |
+| Test/CI gates | AC와 smoke 기준 강화. **`.github/workflows/ci.yml` 파이프라인 생성 완료** | 4/5 |
+| Local DX | `.nvmrc`, engines, `npm ci`, package check 기준 추가. **로컬 셋업 가이드 추가** | 4.5/5 |
+| Observability/Ops | health/log/rollback 갭 명시. **모니터링 SLA 임계값 및 Azure Monitor 알림 규칙 추가** | 4/5 |
 | Compatibility/Upgrade strategy | review loop와 matrix 신설 | 3.5/5 |
 | Deployment/Rollback | gate는 명시, slot/rollback 구현은 Post-MVP | 3/5 |
-| **예상 총점** | 문서/step 스펙 기준 | **72/100** |
+| **예상 총점** | 문서/step 스펙 기준 | **76/100** |
 
 ## 2차 세부 스펙 보강 후 목표 점수
 
@@ -92,23 +92,23 @@ Foundation Cluster는 M0 Platform Foundation과 M9 Quality & Operations를 묶�
 
 ## Gap Register
 
-| ID | 우선순위 | 상태 | 갭 | 영향 | 개선안 | 소유 |
-|----|----------|------|----|------|--------|------|
-| F-GAP-01 | P0 | 스펙 반영 | Next 15가 목표인데 `create-next-app@latest` 사용 | 최신 major로 생성될 수 있음 | `create-next-app`/`next`/`react` 버전 pinning | M0 |
-| F-GAP-02 | P0 | 스펙 반영 | tldraw 패키지명이 최신 공식 문서와 불일치 | 설치/빌드 실패 | `tldraw` 패키지로 정정 | M0/M4 |
-| F-GAP-03 | P0 | 스펙 반영 | Node runtime 기준 없음 | 로컬/CI/Docker/Azure 불일치 | Node 20 LTS 기준, `.nvmrc`/engines/Docker base 명시 | M0 |
-| F-GAP-04 | P0 | 스펙 반영 | package manager/lockfile 정책 없음 | 재현 불가능한 설치 | npm 사용 고정 또는 package manager 결정, lockfile 필수 | M0/M9 |
-| F-GAP-05 | P1 | 스펙 반영, 구현 남음 | Supabase SSR proxy/session refresh 기준 부족 | Auth session edge case | proxy/session refresh utility를 Foundation 작업에 포함 | M0/M1 |
-| F-GAP-06 | P1 | 스펙 반영, 구현 남음 | y-supabase 신뢰성 리스크 | 협업 보드 안정성 저하 | provider adapter abstraction, fallback/recovery test | M0/M4/M3 |
-| F-GAP-07 | P1 | 스펙 반영, 구현 남음 | Dockerfile 상세 기준 없음 | App Service 배포 실패 가능 | multi-stage Dockerfile, non-root, health endpoint 검토 | M0/M9 |
-| F-GAP-08 | P1 | 스펙 반영, CI 파일 남음 | CI gate 구체성 부족 | 수동 검증 의존 | GitHub Actions/Azure pipeline template 추가 | M9 |
-| F-GAP-09 | P1 | 스펙 반영, 자동화 남음 | secret leak 자동 검사 없음 | 보안 사고 | `NEXT_PUBLIC_` audit, secret grep, env import boundary test | M9 |
-| F-GAP-10 | P1 | 스펙 반영, 구현 남음 | 운영 health check 기준 없음 | 장애 감지 지연 | `/api/health` 또는 App Service health check 계획 | M0/M9 |
-| F-GAP-11 | P2 | 스펙 반영, 운영화 남음 | staging/rollback 기준 부족 | 배포 실패시 복구 지연 | App Service deployment slot/previous image rollback 절차 | M9 |
-| F-GAP-12 | P2 | 스펙 반영, 운영화 남음 | dependency upgrade 정책 없음 | 보안/호환성 drift | monthly compatibility review, lockfile diff review | M9 |
-| F-GAP-13 | P1 | 스펙 반영, 구현 남음 | Next standalone static asset 복사 기준 부족 | CSS/static asset 404 | Dockerfile에서 `.next/static`과 `public` 복사 | M0 |
-| F-GAP-14 | P1 | 스펙 반영, 운영 설정 남음 | Azure App Service port/env 기준 부족 | 배포 후 502/timeout | `PORT=3000`, `WEBSITES_PORT=3000`, single exposed port | M0/M9 |
-| F-GAP-15 | P1 | 스펙 반영, 테스트 남음 | Supabase server auth 검증 API 선택 기준 부족 | spoofed cookie/session 신뢰 위험 | server 보호 로직은 `getClaims()` 또는 `getUser()`로 재검증 | M1/M9 |
+| ID | 우선순위 | 상태 | 해소일 | 갭 | 영향 | 개선안 | 소유 |
+|----|----------|------|--------|----|----|--------|------|
+| F-GAP-01 | P0 | 스펙 반영 | - | Next 15가 목표인데 `create-next-app@latest` 사용 | 최신 major로 생성될 수 있음 | `create-next-app`/`next`/`react` 버전 pinning | M0 |
+| F-GAP-02 | P0 | 스펙 반영 | - | tldraw 패키지명이 최신 공식 문서와 불일치 | 설치/빌드 실패 | `tldraw` 패키지로 정정 | M0/M4 |
+| F-GAP-03 | P0 | 스펙 반영 | - | Node runtime 기준 없음 | 로컬/CI/Docker/Azure 불일치 | Node 20 LTS 기준, `.nvmrc`/engines/Docker base 명시 | M0 |
+| F-GAP-04 | P0 | 스펙 반영 | - | package manager/lockfile 정책 없음 | 재현 불가능한 설치 | npm 사용 고정 또는 package manager 결정, lockfile 필수 | M0/M9 |
+| F-GAP-05 | P1 | 스펙 반영, 구현 남음 | - | Supabase SSR proxy/session refresh 기준 부족 | Auth session edge case | proxy/session refresh utility를 Foundation 작업에 포함 | M0/M1 |
+| F-GAP-06 | P1 | 스펙 반영, 구현 남음 | - | y-supabase 신뢰성 리스크 | 협업 보드 안정성 저하 | provider adapter abstraction, fallback/recovery test | M0/M4/M3 |
+| F-GAP-07 | P1 | 스펙 반영, 구현 남음 | - | Dockerfile 상세 기준 없음 | App Service 배포 실패 가능 | multi-stage Dockerfile, non-root, health endpoint 검토 | M0/M9 |
+| F-GAP-08 | P1 | **해소** — `.github/workflows/ci.yml` 생성 | 2026-04-24 | CI gate 구체성 부족 | 수동 검증 의존 | GitHub Actions CI 파이프라인 + CD 배포 파이프라인 추가 완료 | M9 |
+| F-GAP-09 | P1 | **해소** — CI secret-audit job 생성 | 2026-04-24 | secret leak 자동 검사 없음 | 보안 사고 | CI에서 client code 시크릿 검색 + process.env 패턴 + NEXT_PUBLIC_ 오용 검사 + dangerouslySetInnerHTML 검사 자동화 완료 | M9 |
+| F-GAP-10 | P1 | 스펙 반영, 구현 남음 | - | 운영 health check 기준 없음 | 장애 감지 지연 | `/api/health` 또는 App Service health check 계획 | M0/M9 |
+| F-GAP-11 | P2 | 스펙 반영, 운영화 남음 | - | staging/rollback 기준 부족 | 배포 실패시 복구 지연 | App Service deployment slot/previous image rollback 절차 | M9 |
+| F-GAP-12 | P2 | 스펙 반영, 운영화 남음 | - | dependency upgrade 정책 없음 | 보안/호환성 drift | monthly compatibility review, lockfile diff review | M9 |
+| F-GAP-13 | P1 | 스펙 반영, 구현 남음 | - | Next standalone static asset 복사 기준 부족 | CSS/static asset 404 | Dockerfile에서 `.next/static`과 `public` 복사 | M0 |
+| F-GAP-14 | P1 | 스펙 반영, 운영 설정 남음 | - | Azure App Service port/env 기준 부족 | 배포 후 502/timeout | `PORT=3000`, `WEBSITES_PORT=3000`, single exposed port | M0/M9 |
+| F-GAP-15 | P1 | 스펙 반영, 테스트 남음 | - | Supabase server auth 검증 API 선택 기준 부족 | spoofed cookie/session 신뢰 위험 | server 보호 로직은 `getClaims()` 또는 `getUser()`로 재검증 | M1/M9 |
 
 ## 세부 실행 스펙
 
@@ -157,8 +157,9 @@ matcher 기준:
 ### 3. Dockerfile/Standalone Build
 
 Dockerfile 요구:
+- Location: `./Dockerfile` (프로젝트 루트). Step 0에서 생성.
 - multi-stage build: deps -> builder -> runner.
-- base image는 Node 20 계열로 pin한다.
+- base image는 Node 20 계열로 pin한다 (`node:20-alpine` 권장).
 - `npm ci` 사용.
 - `next.config.ts`에 `output: 'standalone'`.
 - runner stage에는 `.next/standalone`, `.next/static`, `public`을 복사한다.
@@ -234,7 +235,7 @@ PR 필수 조건:
 
 정적 검사 기준:
 - `.env`, `.env.local`, `.env.production`은 커밋 금지.
-- `.env.local.example`만 커밋 가능.
+- `.env.example`만 커밋 가능.
 - `SUPABASE_SERVICE_ROLE_KEY`, `AZURE_OPENAI_API_KEY`, `SESSION_SECRET`는 `NEXT_PUBLIC_` 접두사 금지.
 - client component에서 `src/lib/env.ts`의 server env import 금지.
 - `process.env` 직접 접근은 `src/lib/env.ts`, Next config, test setup 같은 허용 파일로 제한.
@@ -269,6 +270,40 @@ interface BoardSyncProvider {
 - provider error 상태에서 UI fallback.
 - notes refetch recovery.
 
+### Yjs-Supabase 동기화 충돌 해결
+
+충돌 감지:
+1. Yjs map size ≠ notes table count (차이 > 2개)
+2. shape.id가 DB note.id와 불일치 (orphaned shapes 존재)
+3. Realtime channel 재연결 후 notes refetch (stale 감지)
+
+해결 알고리즘:
+1. **우선순위**: notes table을 CANONICAL SOURCE로 삼는다 (AI는 notes 기준)
+2. **재구성**: 워크샵 재접속 시 notes 테이블 기준으로 Yjs document 재구성
+3. **사용자 알림**: "화이트보드가 동기화되었습니다" Toast 표시
+4. **로깅**: `{ action: 'yjs-reconcile', shape_count, note_count, workshop_id }` warn 레벨
+
+트리거 시점:
+- gather→cluster 단계 전환 전 (notes count 불일치 시 경고 Toast + 전환 차단)
+- 워크샵 재접속 시 (페이지 로드)
+
+### Yjs-Supabase 동기화 충돌 해결
+
+충돌 감지:
+1. Yjs map size ≠ notes table count (차이 > 2개)
+2. shape.id가 DB note.id와 불일치 (orphaned shapes 존재)
+3. Realtime channel 재연결 후 notes refetch (stale 감지)
+
+해결 알고리즘:
+1. **우선순위**: notes table을 CANONICAL SOURCE로 삼는다 (AI는 notes 기준)
+2. **재구성**: 워크샵 재접속 시 notes 테이블 기준으로 Yjs document 재구성
+3. **사용자 알림**: "화이트보드가 동기화되었습니다" Toast 표시
+4. **로깅**: `{ action: 'yjs-reconcile', shape_count, note_count, workshop_id }` warn 레벨
+
+트리거 시점:
+- gather→cluster 단계 전환 전 (notes count 불일치 시 경고 Toast + 전환 차단)
+- 워크샵 재접속 시 (페이지 로드)
+
 ## 고도화된 Foundation 계획
 
 ### F0.1 Runtime & Dependency Lock
@@ -295,7 +330,7 @@ Acceptance:
 작업:
 - `src/lib/env.ts`에서 server env와 public env를 분리 export.
 - client component에서 server env import 금지 테스트.
-- `.env.local.example`과 운영 env 목록 동기화.
+- `.env.example`과 운영 env 목록 동기화.
 - Supabase anon/publishable key 명칭 전환 가능성을 주석으로 설명.
 
 Acceptance:

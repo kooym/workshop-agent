@@ -1,6 +1,6 @@
 # 스펙 점검 및 정합성 결정
 
-이 문서는 MVP 구현 전에 문서/step 스펙 사이의 충돌을 분류하고, 구현 시 따라야 할 최종 결정을 고정하기 위해 작성한다. 구현 에이전트는 `AGENTS.md`/`CLAUDE.md`의 CRITICAL 규칙을 최상위 기준으로 삼고, step 파일이 이 문서의 결정과 충돌하면 이 문서를 우선 참고한다.
+이 문서는 MVP 구현 전에 문서/step 스펙 사이의 충돌을 분류하고, 구현 시 따라야 할 최종 결정을 고정하기 위해 작성한다. 구현 에이전트는 `CLAUDE.md`의 CRITICAL 규칙을 최상위 기준으로 삼고, step 파일이 이 문서의 결정과 충돌하면 이 문서를 우선 참고한다.
 
 ## 분류 기준
 
@@ -19,12 +19,12 @@
 
 ### 2. `completed` 단계 누락
 - 문제: 상위 규칙은 `completed`를 읽기 전용 최종 상태로 정의하지만, 일부 step의 enum/전환 로직은 `generate`까지만 다룬다.
-- 결정: `workshop_stage` enum은 `gather`, `cluster`, `vote`, `derive`, `generate`, `completed`를 모두 포함한다.
+- 결정: `workshop_stage` enum은 `context`, `gather`, `cluster`, `vote`, `design`, `generate`, `report`, `completed` 8단계를 모두 포함한다.
 - 적용 위치: `step1`, `step3`, `step8`, `step9`에서 completed 상태와 읽기 전용 규칙을 명시한다.
 
 ### 3. 환경 변수 검증과 signed cookie 누락
 - 문제: `SESSION_SECRET`과 `src/lib/env.ts` 경유 환경 변수 검증이 CRITICAL이지만 초기 step 지시가 약하다.
-- 결정: `step0`에서 `.env.local.example`에 `SESSION_SECRET`을 포함하고 `src/lib/env.ts`를 만든다. 서버 전용 모듈은 `process.env`를 직접 읽지 않고 `env.ts`를 import한다.
+- 결정: `step0`에서 `.env.example`에 `SESSION_SECRET`을 포함하고 `src/lib/env.ts`를 만든다. 서버 전용 모듈은 `process.env`를 직접 읽지 않고 `env.ts`를 import한다.
 - 적용 위치: `step2`에서 참석자 쿠키를 반드시 HMAC 서명하고, 서명 시크릿으로 `SUPABASE_SERVICE_ROLE_KEY`를 재사용하지 않는다.
 
 ### 4. tldraw/Yjs와 단순 보드 구현 충돌
@@ -42,16 +42,16 @@
 - 결정: 기능 step은 테스트를 먼저 작성하고, AC에 최소 `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`를 포함한다. Docker 빌드는 최종 통합 step에서 검증한다.
 - 적용 위치: 모든 step의 Acceptance Criteria와 작업 지시에 반영한다.
 
-### 7. vote -> derive 전환 조건 불일치
-- 문제: 상위 규칙은 “퍼실리테이터가 투표 마감 선언”을 전환 조건으로 두지만, 일부 step은 투표 1건 이상을 요구한다.
-- 결정: `vote -> derive`는 퍼실리테이터 확인 액션 자체가 마감 선언이다. 전원 투표 또는 최소 1표는 필수 조건이 아니다.
+### 7. vote → design 전환 조건 불일치
+- 문제: 상위 규칙은 "퍼실리테이터가 투표 마감 선언"을 전환 조건으로 두지만, 일부 step은 투표 1건 이상을 요구한다.
+- 결정: `vote → design`은 퍼실리테이터 확인 액션 자체가 마감 선언이다. 전원 투표 또는 최소 1표는 필수 조건이 아니다.
 - 적용 위치: `step9` 전환 조건에서 투표 수 필수 조건을 제거한다.
 
 ## P1: MVP 흐름 공백
 
 ### 1. 단계별 쓰기 잠금
 - 문제: 개별 API step이 현재 단계 검증을 충분히 강제하지 않으면 완료 이후에도 쓰기가 가능해진다.
-- 결정: notes는 gather, votes는 vote, ax_tasks 편집은 derive, prd 편집은 generate에서만 허용한다. completed는 모든 쓰기를 차단한다.
+- 결정: notes는 gather, votes는 vote, ax_tasks 편집은 design, prd 편집은 generate, ax_reports 편집은 report에서만 허용한다. completed는 모든 쓰기를 차단한다. 단, 자유 네비게이션 모델에서 `current_stage` 이하 단계는 편집 가능하며, 이전 단계 편집 시 하류 stale 전파를 수행한다.
 
 ### 2. AI 처리 중 참석자 UX
 - 문제: is_processing 플래그가 서버 락으로만 쓰이면 참석자는 왜 화면이 대기 중인지 알기 어렵다.
@@ -65,13 +65,38 @@
 - 문제: 프롬프트만으로 JSON 결과 품질을 보장할 수 없다.
 - 결정: AI 응답은 모두 Zod 스키마로 파싱하고, 클러스터링 누락/중복 note_id, 과제의 유효하지 않은 cluster_id, 빈 PRD/잘림 가능성을 사후 검증한다.
 
+### 5. Stale 데이터 전파 시스템
+- 문제: 이전 단계 데이터를 수정하면 하류 AI 산출물이 무효화되는데, 이를 자동 추적하지 않으면 잘못된 결과물이 최종 보고서에 포함된다.
+- 결정: `propagateStale(workshopId, modifiedStage)` 유틸(`src/lib/api/stale.ts`)을 구현한다. `current_stage > modifiedStage`일 때 해당 단계 이후 AI 산출물의 `is_stale = true` 설정. 대상: `clusters`, `design_artifacts`, `prds`, `ax_reports`. 퍼실리테이터에게 "AI 재실행" / "현재 결과 유지" 선택 제공. completed 전진 전 모든 stale 해제 필수.
+- 적용 위치: 각 리소스 수정 API Route, `step9`의 stage flow integration.
+
+### 6. 자유 네비게이션과 viewingStage 이중 상태
+- 문제: `current_stage`만 사용하면 참여자가 이전 단계를 열람하거나 편집할 수 없다.
+- 결정: `current_stage`(DB, 최고 도달 단계)와 `viewingStage`(Zustand, 개인 현재 보기 단계) 이중 구조를 사용한다. StageNav 클릭으로 `viewingStage`만 변경. Realtime으로 `current_stage` 전진 수신 시 `viewingStage`도 자동 이동.
+- 적용 위치: `src/stores/workshop.ts`, `step3` workshop shell, `step9` stage flow.
+
+### 7. Rate Limiting
+- 문제: 초대 코드 무차별 대입이나 로그인 시도에 대한 방어가 누락되면 보안 취약점이 된다.
+- 결정: `/api/workshops/join` IP 기반 10회/분, 연속 5회 실패 시 60초 차단. 인증 엔드포인트(로그인/회원가입)도 IP 기반 10회/분 제한.
+- 적용 위치: `step2` auth/invite API, M1 middleware.
+
+### 8. API 표준 에러 코드
+- 문제: 에러 코드가 표준화되지 않으면 클라이언트 에러 핸들링이 일관적이지 않다.
+- 결정: `src/lib/api/response.ts`에 12개 상수 정의: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `PROCESSING`, `STAGE_LOCKED`, `STALE_LOCK`, `VOTE_LIMIT`, `PARTICIPANT_LIMIT`, `NOTE_LIMIT`, `INTERNAL_ERROR`.
+- 적용 위치: `step1` 또는 `step2`에서 공통 응답 모듈 구현.
+
+### 9. AI 처리 잠금 stale lock 자동 복구
+- 문제: AI 서버 크래시/OOM으로 try/finally가 실행되지 않으면 `is_processing = true`가 영구 잠금될 수 있다.
+- 결정: `is_processing_since` 타임스탬프를 함께 설정. API에서 5분 초과 시 stale lock 판정 → 자동 복구.
+- 적용 위치: `step5` AI clustering부터 적용, M5 processing lock helper.
+
 ## P2: 범위 정리
 
 ### 1. 수동 클러스터 병합/분리
 - 결정: UI 노출 규칙에는 퍼실리테이터 권한으로 기록되어 있으나 MVP step에서는 Post-MVP로 제외한다. MVP에서는 클러스터명 편집과 재실행만 허용한다.
 
 ### 2. 타이머
-- 결정: PRD에는 P1 기능으로 남기되 MVP 구현 step에서는 제외한다. StageNav와 레이아웃은 나중에 타이머를 넣을 수 있는 공간만 확보한다.
+- 결정: MVP에서는 `timer_minutes` 설정 필드를 DB에 보존하되(settings JSON), 실제 카운트다운 UI와 presence broadcast 동기화는 Post-MVP에서 구현한다. StageNav와 레이아웃은 나중에 타이머를 넣을 수 있는 공간만 확보한다.
 
 ### 3. PRD PDF 내보내기와 버전 히스토리 UI
 - 결정: MVP는 Markdown 생성/편집/복사까지 구현한다. DB version 필드는 유지하되 히스토리 UI와 PDF는 Post-MVP로 둔다.
@@ -81,6 +106,6 @@
 
 ## 최종 구현 원칙
 
-1. 문서 정합성 우선순위는 `AGENTS.md`/`CLAUDE.md` CRITICAL 규칙 > 이 문서 > `MODULE_MAP.md`/`modules/*.md` > step 파일 > 일반 설명 순서다.
+1. 문서 정합성 우선순위는 `CLAUDE.md` CRITICAL 규칙 > 이 문서 > `MODULE_MAP.md`/`modules/*.md` > step 파일 > 일반 설명 순서다.
 2. 구현자는 step 파일에서 오래된 지시를 발견하면 최신 결정에 맞게 보정하고, summary에 충돌 해결 내용을 남긴다.
 3. 앱 코드 구현 전에 step 스펙이 이 문서의 P0 항목을 모두 반영해야 한다.

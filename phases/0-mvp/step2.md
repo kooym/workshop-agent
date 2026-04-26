@@ -43,11 +43,13 @@ Foundation 전제:
 ### 1. 퍼실리테이터 회원가입/로그인 API
 
 **회원가입** — `src/app/api/auth/signup/route.ts`:
+- **Rate Limiting**: IP 기반 10회/분 제한. 초과 시 429 응답.
 - 요청 body를 Zod로 검증 (이메일, 비밀번호(8자 이상), 이름)
 - Supabase Auth `signUp`으로 사용자 생성
 - 응답: `{ data: { user } }`
 
 **로그인** — `src/app/api/auth/login/route.ts`:
+- **Rate Limiting**: IP 기반 10회/분 제한. 초과 시 429 응답.
 - 요청 body를 Zod로 검증 (이메일, 비밀번호)
 - Supabase Auth `signInWithPassword`
 - 응답: `{ data: { user, session } }`
@@ -123,6 +125,36 @@ export function success<T>(data: T, status = 200): NextResponse
 export function error(code: string, message: string, status: number): NextResponse
 ```
 
+`src/lib/api/rate-limit.ts` — IP 기반 Rate Limiter (인메모리):
+```typescript
+// 슬라이딩 윈도우 카운터. windowMs 기간 내 maxRequests 초과 시 429 반환.
+// 연속 실패 임계치(maxFailures) 초과 시 blockDurationMs 동안 차단.
+export function createRateLimiter(options: {
+  windowMs: number;      // 기본 60_000 (1분)
+  maxRequests: number;   // 기본 10
+  maxFailures?: number;  // 기본 5 (연속 실패 차단 기준)
+  blockDurationMs?: number; // 기본 60_000
+}): (ip: string, failed?: boolean) => { allowed: boolean; retryAfterMs?: number }
+```
+- 인메모리 Map으로 관리 (MVP). 단일 인스턴스 배포 전제.
+- 적용 대상: POST /api/auth/signup, POST /api/auth/login, POST /api/workshops/join
+
+**IP 추출 방식**:
+```typescript
+function getClientIp(req: NextRequest): string {
+  // Azure App Service / reverse proxy 환경: x-forwarded-for 헤더에서 첫 번째 IP 추출
+  const forwarded = req.headers.get('x-forwarded-for')
+  if (forwarded) {
+    return forwarded.split(',')[0].trim()  // 첫 번째 = 실제 클라이언트 IP
+  }
+  // 로컬 개발 (프록시 없음): x-real-ip 또는 소켓 주소
+  return req.headers.get('x-real-ip') ?? req.ip ?? '127.0.0.1'
+}
+```
+- Azure App Service는 `x-forwarded-for`에 `client, proxy1, proxy2` 형식으로 전달. 첫 번째 IP가 실제 클라이언트
+- `x-forwarded-for` 스푸핑 방지: Azure App Service가 원본 IP를 강제 주입하므로 별도 방어 불필요 (신뢰 프록시)
+- 로컬 개발 시 `127.0.0.1` 폴백으로 동작 보장
+
 `src/lib/api/middleware.ts` — 공통 미들웨어:
 ```typescript
 // 참석자 쿠키 세션 또는 퍼실리테이터 Supabase Auth 세션 모두 검증
@@ -155,11 +187,14 @@ export const loginSchema = z.object({
 export const createWorkshopSchema = z.object({
   project_id: z.string().uuid(),
   title: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
   settings: z.object({
     anonymous: z.boolean().optional(),
     votes_per_person: z.number().int().min(1).max(10).optional(),
     max_participants: z.number().int().min(2).max(20).optional(),
     results_visible: z.boolean().optional(),
+    vote_mode: z.enum(['cluster', 'note']).optional(),
+    timer_minutes: z.number().int().min(1).max(60).nullable().optional(),
   }).optional(),
 })
 
@@ -178,7 +213,7 @@ export const joinWorkshopSchema = z.object({
 - `project_id`가 요청자 소유 프로젝트인지 검증. 아니면 403/404 반환
 - 같은 프로젝트에 `current_stage <> 'completed'`인 워크샵이 이미 있으면 409 CONFLICT 반환
 - 초대 코드 자동 생성 (generateInviteCode). 충돌 시 재시도 (최대 3회)
-- workshops 테이블에 INSERT (project_id, facilitator_id = auth.user.id, settings 기본값 병합, current_stage='gather')
+- workshops 테이블에 INSERT (project_id, facilitator_id = auth.user.id, settings 기본값 병합, current_stage='context')
 - participants 테이블에 퍼실리테이터 INSERT (is_facilitator: true, user_id = auth.user.id)
 - 응답: `{ data: { workshop, participant } }`
 
@@ -187,14 +222,25 @@ GET 핸들러 (withFacilitator):
 - 퍼실리테이터 소유 프로젝트의 워크샵 목록 조회
 - 응답: `{ data: workshops[] }`
 
-### 8. API Route: 초대 코드 참여
+### 8. API Route: 워크샵 미리보기
+
+`src/app/api/workshops/preview/route.ts` — GET `?invite_code=:code` 핸들러:
+
+- invite_code로 workshops 조회. 존재하지 않으면 404 응답
+- 인증 불필요 (코드 입력 후 참여 전 미리보기 용도)
+- 응답: `{ data: { title, description, current_stage, participant_count, max_participants } }`
+- 민감 정보(facilitator_id, settings 전체 등)는 포함하지 않는다
+
+### 9. API Route: 초대 코드 참여
 
 `src/app/api/workshops/join/route.ts` — POST 핸들러:
 
+- **Rate Limiting**: IP 기반 10회/분 제한. 연속 5회 실패(404/409) 시 60초 차단. 초과 시 429 응답.
 - 요청 body를 `joinWorkshopSchema`로 검증
 - invite_code로 workshops 조회. 존재하지 않으면 404 응답
 - completed 워크샵이면 신규 참석자도 읽기 전용 participant로 생성하되, 응답에 readOnly 상태를 포함한다.
 - 현재 참가자 수가 max_participants(기본 20)에 도달했으면 409 응답 ("워크샵이 가득 찼습니다")
+- **참가자 초과 방지 (동시성 안전)**: `SELECT COUNT(*) FROM participants WHERE workshop_id = :id FOR UPDATE` 트랜잭션으로 동시 JOIN 요청 시에도 max_participants 초과를 방지한다
 - participants 테이블에 INSERT (is_facilitator: false, user_id: null)
 - 세션 쿠키 설정 (setSession)
 - 응답: `{ data: { workshop, participant } }`
@@ -205,6 +251,7 @@ GET 핸들러 (withFacilitator):
 
 - 워크샵 참여 시 participant_id와 workshop_id를 HTTP-only 쿠키에 저장
 - 쿠키 값은 반드시 `SESSION_SECRET`으로 HMAC 서명한다. 평문 JSON/base64만 저장하지 마라.
+- 쿠키 서명 포맷: `v1:{payload}.{signature}` — payload = `base64url(workshop_id:participant_id)`, signature = `HMAC-SHA256(payload, SESSION_SECRET)` hex. `v1:` 접두사로 키 로테이션 시 구버전 검증 폴백 지원.
 - `SUPABASE_SERVICE_ROLE_KEY`를 세션 서명 시크릿으로 재사용하지 마라.
 - 쿠키 설정: `HttpOnly: true`, `Secure: true` (프로덕션), `SameSite: Lax`, `maxAge: 86400` (24시간)
 - 브라우저 새로고침 시 쿠키가 유지되어 세션 자동 복구
@@ -216,6 +263,48 @@ export async function getSession(): Promise<{ workshopId: string, participantId:
 export async function clearSession(): Promise<void>
 ```
 
+**쿠키 서명 구현 상세** (Node.js `crypto` 모듈 사용):
+
+```typescript
+import { createHmac } from 'crypto'
+
+// --- 서명 생성 ---
+function signSession(workshopId: string, participantId: string): string {
+  const payload = Buffer.from(`${workshopId}:${participantId}`)
+    .toString('base64url')  // base64url (NOT base64)
+  const signature = createHmac('sha256', env.SESSION_SECRET)
+    .update(payload)
+    .digest('hex')  // hex 인코딩
+  return `v1:${payload}.${signature}`  // v1: 접두사
+}
+
+// --- 서명 검증 ---
+function verifySession(cookieValue: string): { workshopId: string, participantId: string } | null {
+  if (!cookieValue.startsWith('v1:')) return null  // 버전 체크
+  const body = cookieValue.slice(3)  // 'v1:' 제거
+  const dotIndex = body.lastIndexOf('.')
+  if (dotIndex === -1) return null
+  const payload = body.slice(0, dotIndex)
+  const signature = body.slice(dotIndex + 1)
+  // 타이밍 공격 방지: timingSafeEqual 사용
+  const expected = createHmac('sha256', env.SESSION_SECRET)
+    .update(payload)
+    .digest('hex')
+  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null
+  // payload 디코딩
+  const decoded = Buffer.from(payload, 'base64url').toString()
+  const [workshopId, participantId] = decoded.split(':')
+  if (!workshopId || !participantId) return null
+  return { workshopId, participantId }
+}
+```
+
+- `setSession()`: `signSession()`으로 쿠키 값 생성 후 `cookies().set()` 호출
+- `getSession()`: 쿠키에서 값을 읽고 `verifySession()`으로 검증. 실패 시 null 반환
+- 쿠키 옵션: `{ httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 86400, path: '/' }`
+- `Secure` 플래그: 프로덕션에서만 true (localhost 개발 지원)
+- 키 로테이션: MVP에서는 v1만 지원. Post-MVP에서 v2 도입 시 `v1:` 폴백 검증 유지
+
 서명 검증 실패, 만료, participant/workshop 불일치 시 `getSession()`은 null을 반환해야 한다.
 
 테스트:
@@ -225,14 +314,21 @@ export async function clearSession(): Promise<void>
 - Supabase Auth cookie와 guest cookie가 동시에 있을 때 `withAuth`의 우선순위와 반환 context가 명확해야 한다.
 - facilitator-only route는 guest cookie만으로 접근할 수 없다.
 
-### 10. 랜딩 페이지 UI
+### 10. 랜딩 페이지 UI (2단계 참여 플로우)
 
 `src/app/page.tsx`를 UI 가이드의 랜딩 페이지 레이아웃에 맞게 구현하라:
 
+**Step 1 — 코드 입력**:
 - "Workshop Agent" 제목
-- "초대 코드로 참여" — 코드 입력 + 이름 입력 + 참여 버튼
+- "초대 코드로 참여" — 6자리 코드 입력 + "확인" 버튼
 - 하단에 "퍼실리테이터이신가요? 로그인" 링크 → `/auth/login`으로 이동
+
+**Step 2 — 워크샵 미리보기 + 이름 입력**:
+- GET /api/workshops/preview로 워크샵 정보 조회
+- 워크샵 제목, 목적(description), 현재 단계, 참가자 수/정원 표시
+- 이름 입력 필드 + "참여하기" 버튼
 - 워크샵 참여 성공 시 `/workshop/[id]`로 리다이렉트
+- completed 워크샵이면 "이미 종료된 워크샵입니다 (읽기 전용)" 안내 표시
 
 ### 11. 워크샵 메인 페이지 레이아웃
 

@@ -2,7 +2,8 @@
   "phases": [
     {
       "dir": "0-mvp",
-      "status": "pending"
+      "status": "pending",
+      "known_issues": "Step 0 Docker build and Supabase local db reset for Steps 1-2 were not verified because Docker Desktop/daemon is unavailable; continuing by user approval. Current Node is v24.14.1 while the project standard is Node 20 LTS."
     }
   ]
 }

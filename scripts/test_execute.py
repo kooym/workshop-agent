@@ -271,6 +271,17 @@ class TestBuildPreamble:
         result = executor._build_preamble("", "")
         assert "/phases/0-mvp/index.json" in result
 
+    def test_includes_ci_gate(self, executor):
+        result = executor._build_preamble("", "")
+        assert "npm run lint" in result
+        assert "npm run typecheck" in result
+        assert "npm run test" in result
+        assert "npm run build" in result
+
+    def test_includes_docker_gate(self, executor):
+        result = executor._build_preamble("", "")
+        assert "docker build" in result
+
 
 # ---------------------------------------------------------------------------
 # _update_top_index
@@ -469,6 +480,15 @@ class TestInvokeClaude:
 
         assert mock_run.call_args[1]["timeout"] == 1800
 
+    def test_timeout_returns_error_output(self, executor):
+        step = {"step": 2, "name": "ui"}
+
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1800)):
+            output = executor._invoke_claude(step, "preamble")
+
+        assert output["exitCode"] == -1
+        assert "TimeoutExpired" in output["stderr"]
+
 
 # ---------------------------------------------------------------------------
 # progress_indicator (= 이전 Spinner)
@@ -544,8 +564,9 @@ class TestCheckBlockers:
             {"step": 1, "name": "bad", "status": "error", "error_message": "fail"},
         ]
         inst = self._make_executor_with_steps(tmp_project, steps)
-        with pytest.raises(SystemExit) as exc_info:
-            inst._check_blockers()
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)):
+            with pytest.raises(SystemExit) as exc_info:
+                inst._check_blockers()
         assert exc_info.value.code == 1
 
     def test_blocked_step_exits_2(self, tmp_project):
@@ -554,6 +575,290 @@ class TestCheckBlockers:
             {"step": 1, "name": "stuck", "status": "blocked", "blocked_reason": "API key"},
         ]
         inst = self._make_executor_with_steps(tmp_project, steps)
-        with pytest.raises(SystemExit) as exc_info:
-            inst._check_blockers()
+        with patch("subprocess.run", return_value=MagicMock(returncode=0)):
+            with pytest.raises(SystemExit) as exc_info:
+                inst._check_blockers()
         assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# _ensure_created_at
+# ---------------------------------------------------------------------------
+
+class TestEnsureCreatedAt:
+    def test_sets_created_at_when_missing(self, executor):
+        index = json.loads(executor._index_file.read_text())
+        assert "created_at" not in index
+
+        executor._ensure_created_at()
+
+        index = json.loads(executor._index_file.read_text())
+        assert "created_at" in index
+        assert "+0900" in index["created_at"]
+
+    def test_does_not_overwrite_existing(self, executor):
+        index = json.loads(executor._index_file.read_text())
+        index["created_at"] = "2020-01-01T00:00:00+0900"
+        executor._index_file.write_text(json.dumps(index))
+
+        executor._ensure_created_at()
+
+        index = json.loads(executor._index_file.read_text())
+        assert index["created_at"] == "2020-01-01T00:00:00+0900"
+
+
+# ---------------------------------------------------------------------------
+# _execute_single_step (mocked)
+# ---------------------------------------------------------------------------
+
+class TestExecuteSingleStep:
+    def _make_executor_for_step(self, tmp_project, steps, step_md_content="# Step"):
+        d = tmp_project / "phases" / "test-exec"
+        d.mkdir(exist_ok=True)
+        index = {"project": "T", "phase": "test", "steps": steps}
+        (d / "index.json").write_text(json.dumps(index))
+        for s in steps:
+            md = d / f"step{s['step']}.md"
+            if not md.exists():
+                md.write_text(step_md_content)
+
+        with patch.object(ex, "ROOT", tmp_project):
+            inst = ex.StepExecutor.__new__(ex.StepExecutor)
+        inst._root = str(tmp_project)
+        inst._phases_dir = tmp_project / "phases"
+        inst._phase_dir = d
+        inst._phase_dir_name = "test-exec"
+        inst._index_file = d / "index.json"
+        inst._top_index_file = tmp_project / "phases" / "index.json"
+        inst._phase_name = "test"
+        inst._project = "T"
+        inst._total = len(steps)
+        inst._auto_push = False
+        # mock git
+        inst._run_git = lambda *args: MagicMock(returncode=0, stdout="", stderr="")
+        return inst
+
+    def test_completed_on_first_try(self, tmp_project):
+        steps = [{"step": 0, "name": "a", "status": "pending"}]
+        inst = self._make_executor_for_step(tmp_project, steps)
+
+        def fake_invoke(step, preamble):
+            # Claude 세션이 index.json을 completed로 업데이트하는 것을 시뮬레이션
+            index = json.loads(inst._index_file.read_text())
+            index["steps"][0]["status"] = "completed"
+            index["steps"][0]["summary"] = "done"
+            inst._index_file.write_text(json.dumps(index))
+            return {"step": 0, "name": "a", "exitCode": 0, "stdout": "", "stderr": ""}
+
+        inst._invoke_claude = fake_invoke
+        result = inst._execute_single_step(steps[0], "guardrails")
+        assert result is True
+
+        index = json.loads(inst._index_file.read_text())
+        assert index["steps"][0]["status"] == "completed"
+        assert "completed_at" in index["steps"][0]
+
+    def test_retries_on_error_then_completes(self, tmp_project):
+        steps = [{"step": 0, "name": "a", "status": "pending"}]
+        inst = self._make_executor_for_step(tmp_project, steps)
+
+        call_count = {"n": 0}
+        def fake_invoke(step, preamble):
+            call_count["n"] += 1
+            index = json.loads(inst._index_file.read_text())
+            if call_count["n"] < 2:
+                index["steps"][0]["status"] = "error"
+                index["steps"][0]["error_message"] = "type error"
+            else:
+                index["steps"][0]["status"] = "completed"
+                index["steps"][0]["summary"] = "fixed"
+            inst._index_file.write_text(json.dumps(index))
+            return {"step": 0, "name": "a", "exitCode": 0, "stdout": "", "stderr": ""}
+
+        inst._invoke_claude = fake_invoke
+        with patch("time.sleep"):
+            result = inst._execute_single_step(steps[0], "guardrails")
+        assert result is True
+        assert call_count["n"] == 2
+
+    def test_max_retries_then_exits(self, tmp_project):
+        steps = [{"step": 0, "name": "a", "status": "pending"}]
+        inst = self._make_executor_for_step(tmp_project, steps)
+
+        def fake_invoke(step, preamble):
+            index = json.loads(inst._index_file.read_text())
+            index["steps"][0]["status"] = "error"
+            index["steps"][0]["error_message"] = "persistent failure"
+            inst._index_file.write_text(json.dumps(index))
+            return {"step": 0, "name": "a", "exitCode": 1, "stdout": "", "stderr": ""}
+
+        # top index 필요
+        top = {"phases": [{"dir": "test-exec", "status": "pending"}]}
+        inst._top_index_file.parent.mkdir(parents=True, exist_ok=True)
+        inst._top_index_file.write_text(json.dumps(top))
+
+        inst._invoke_claude = fake_invoke
+        with patch("time.sleep"):
+            with pytest.raises(SystemExit) as exc_info:
+                inst._execute_single_step(steps[0], "guardrails")
+        assert exc_info.value.code == 1
+
+    def test_blocked_exits_immediately(self, tmp_project):
+        steps = [{"step": 0, "name": "a", "status": "pending"}]
+        inst = self._make_executor_for_step(tmp_project, steps)
+
+        def fake_invoke(step, preamble):
+            index = json.loads(inst._index_file.read_text())
+            index["steps"][0]["status"] = "blocked"
+            index["steps"][0]["blocked_reason"] = "API key needed"
+            inst._index_file.write_text(json.dumps(index))
+            return {"step": 0, "name": "a", "exitCode": 0, "stdout": "", "stderr": ""}
+
+        top = {"phases": [{"dir": "test-exec", "status": "pending"}]}
+        inst._top_index_file.parent.mkdir(parents=True, exist_ok=True)
+        inst._top_index_file.write_text(json.dumps(top))
+
+        inst._invoke_claude = fake_invoke
+        with pytest.raises(SystemExit) as exc_info:
+            inst._execute_single_step(steps[0], "guardrails")
+        assert exc_info.value.code == 2
+
+
+# ---------------------------------------------------------------------------
+# _execute_all_steps (mocked)
+# ---------------------------------------------------------------------------
+
+class TestExecuteAllSteps:
+    def test_skips_completed_runs_pending(self, tmp_project):
+        d = tmp_project / "phases" / "test-all"
+        d.mkdir(parents=True)
+        steps = [
+            {"step": 0, "name": "done", "status": "completed", "summary": "ok"},
+            {"step": 1, "name": "todo", "status": "pending"},
+        ]
+        index = {"project": "T", "phase": "test", "steps": steps}
+        (d / "index.json").write_text(json.dumps(index))
+        (d / "step1.md").write_text("# Step 1")
+
+        with patch.object(ex, "ROOT", tmp_project):
+            inst = ex.StepExecutor.__new__(ex.StepExecutor)
+        inst._root = str(tmp_project)
+        inst._phases_dir = tmp_project / "phases"
+        inst._phase_dir = d
+        inst._phase_dir_name = "test-all"
+        inst._index_file = d / "index.json"
+        inst._top_index_file = tmp_project / "phases" / "index.json"
+        inst._phase_name = "test"
+        inst._total = 2
+
+        executed_steps = []
+        def fake_execute_single(step, guardrails):
+            executed_steps.append(step["step"])
+            index_data = json.loads(inst._index_file.read_text())
+            for s in index_data["steps"]:
+                if s["step"] == step["step"]:
+                    s["status"] = "completed"
+                    s["summary"] = "done"
+            inst._index_file.write_text(json.dumps(index_data))
+            return True
+
+        inst._execute_single_step = fake_execute_single
+        inst._execute_all_steps("guardrails")
+
+        assert executed_steps == [1]
+
+    def test_records_started_at(self, tmp_project):
+        d = tmp_project / "phases" / "test-ts"
+        d.mkdir(parents=True)
+        steps = [{"step": 0, "name": "a", "status": "pending"}]
+        index = {"project": "T", "phase": "test", "steps": steps}
+        (d / "index.json").write_text(json.dumps(index))
+        (d / "step0.md").write_text("# Step 0")
+
+        with patch.object(ex, "ROOT", tmp_project):
+            inst = ex.StepExecutor.__new__(ex.StepExecutor)
+        inst._root = str(tmp_project)
+        inst._phases_dir = tmp_project / "phases"
+        inst._phase_dir = d
+        inst._phase_dir_name = "test-ts"
+        inst._index_file = d / "index.json"
+        inst._top_index_file = tmp_project / "phases" / "index.json"
+        inst._phase_name = "test"
+        inst._total = 1
+        inst.TZ = ex.StepExecutor.TZ
+
+        def fake_execute_single(step, guardrails):
+            idx = json.loads(inst._index_file.read_text())
+            for s in idx["steps"]:
+                if s["step"] == step["step"]:
+                    s["status"] = "completed"
+                    s["summary"] = "ok"
+            inst._index_file.write_text(json.dumps(idx))
+            return True
+
+        inst._execute_single_step = fake_execute_single
+        inst._execute_all_steps("guardrails")
+
+        idx = json.loads(inst._index_file.read_text())
+        assert "started_at" in idx["steps"][0]
+
+
+# ---------------------------------------------------------------------------
+# _finalize (mocked)
+# ---------------------------------------------------------------------------
+
+class TestFinalize:
+    def test_sets_completed_at(self, executor, top_index):
+        executor._top_index_file = top_index
+        executor._auto_push = False
+        executor._finalize()
+
+        index = json.loads(executor._index_file.read_text())
+        assert "completed_at" in index
+
+    def test_updates_top_index(self, executor, top_index):
+        executor._top_index_file = top_index
+        executor._auto_push = False
+        executor._finalize()
+
+        data = json.loads(top_index.read_text())
+        mvp = next(p for p in data["phases"] if p["dir"] == "0-mvp")
+        assert mvp["status"] == "completed"
+
+    def test_auto_push_calls_git_push(self, executor, top_index):
+        executor._top_index_file = top_index
+        executor._auto_push = True
+        executor._phase_name = "mvp"
+
+        push_called = {"called": False}
+        original_run_git = executor._run_git
+        def fake_git(*args):
+            if args[0] == "push":
+                push_called["called"] = True
+                assert "-u" in args
+                assert "origin" in args
+                return MagicMock(returncode=0, stdout="", stderr="")
+            if args[:2] == ("diff", "--cached"):
+                return MagicMock(returncode=0)  # no changes to commit
+            return MagicMock(returncode=0, stdout="", stderr="")
+        executor._run_git = fake_git
+
+        executor._finalize()
+        assert push_called["called"] is True
+
+    def test_push_failure_exits(self, executor, top_index):
+        executor._top_index_file = top_index
+        executor._auto_push = True
+        executor._phase_name = "mvp"
+
+        def fake_git(*args):
+            if args[0] == "push":
+                return MagicMock(returncode=1, stdout="", stderr="rejected")
+            if args[:2] == ("diff", "--cached"):
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=0, stdout="", stderr="")
+        executor._run_git = fake_git
+
+        with pytest.raises(SystemExit) as exc_info:
+            executor._finalize()
+        assert exc_info.value.code == 1

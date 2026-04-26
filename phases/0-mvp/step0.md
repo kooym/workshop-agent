@@ -31,11 +31,27 @@ npx create-next-app@15 . --typescript --tailwind --eslint --app --src-dir --impo
 - App Router 사용
 - src/ 디렉토리 사용
 
+### 1-1. 사전 조건 확인
+
+이 step을 시작하기 전에 아래 도구가 설치되어 있어야 한다:
+
+```bash
+node -v          # v20.x (LTS) 확인
+npm -v           # 9+ 확인
+docker --version # Docker Desktop 실행 중 확인
+npx supabase --version  # Supabase CLI 설치 확인
+```
+
+- **Docker Desktop**: Step 1에서 `npx supabase start`로 로컬 PostgreSQL + Realtime을 띄우려면 Docker Desktop이 미리 실행 중이어야 한다.
+- **Supabase CLI**: `npx supabase init`으로 프로젝트 초기화 후, Step 1에서 `npx supabase start` → `npx supabase db reset`로 로컬 DB에 마이그레이션을 적용한다.
+
 ### 2. 추가 패키지 설치
 
 ```bash
 npm install @supabase/supabase-js @supabase/ssr zustand lucide-react zod react-markdown sonner
 npm install tldraw yjs y-supabase
+npm install @xyflow/react elkjs mermaid
+npm install openai
 npm install -D @types/node vitest @testing-library/react @testing-library/user-event @vitejs/plugin-react jsdom
 ```
 
@@ -47,6 +63,7 @@ npm install -D @types/node vitest @testing-library/react @testing-library/user-e
 - `react-markdown`: PRD Markdown 렌더링 (Step 8에서 사용)
 - `sonner`: Toast 알림 컴포넌트 (Step 9에서 사용)
 - `tldraw`, `yjs`, `y-supabase`: Gather 단계 화이트보드 + CRDT 동기화 (Step 4에서 사용)
+- `openai`: Azure OpenAI GPT-4o 연동 (Step 5~8에서 사용)
 - `vitest` + `@testing-library/*`: 테스트 프레임워크 (ADR-010)
 
 호환성 확인:
@@ -56,16 +73,22 @@ npm install -D @types/node vitest @testing-library/react @testing-library/user-e
 
 ### 3. 환경 변수 설정
 
-`.env.local.example` 파일을 생성하라 (실제 값은 넣지 마라):
+`.env.example` 파일을 생성하라 (실제 값은 넣지 마라).
+로컬 Supabase 기본 URL과 키 획득 방법을 주석으로 안내하라:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-# 선택: 새 Supabase publishable key 프로젝트를 위한 alias. MVP 기본값은 ANON_KEY.
-# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-publishable-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SESSION_SECRET=replace-with-random-string-at-least-32-characters
-AZURE_OPENAI_ENDPOINT=your-azure-openai-endpoint
+# === 로컬 개발 (npx supabase start 실행 후 출력값 복사) ===
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<npx supabase start 출력의 anon key>
+# 선택: 새 Supabase publishable key alias. MVP 기본값은 ANON_KEY.
+# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+
+# === 서버 전용 (NEXT_PUBLIC_ 접두사 절대 금지) ===
+SUPABASE_SERVICE_ROLE_KEY=<npx supabase start 출력의 service_role key>
+SESSION_SECRET=<openssl rand -base64 32 로 생성>
+
+# === Azure OpenAI (로컬에서도 실제 키 필수) ===
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-azure-openai-api-key
 AZURE_OPENAI_DEPLOYMENT=gpt-4o
 AZURE_OPENAI_API_VERSION=2024-08-01-preview
@@ -168,20 +191,27 @@ src/
 │   │   ├── votes/
 │   │   ├── tasks/
 │   │   ├── prd/
+│   │   ├── process-edges/
+│   │   ├── process-lanes/
+│   │   ├── process-graph/
+│   │   ├── editing-locks/
 │   │   └── ai/
 │   │       ├── cluster/
-│   │       ├── derive/
-│   │       └── generate/
+│   │       ├── design/
+│   │       ├── generate/
+│   │       └── report/
 │   └── workshop/
 │       └── [id]/
 ├── components/
 │   ├── auth/
 │   ├── dashboard/
 │   ├── board/
+│   ├── context/
 │   ├── cluster/
 │   ├── vote/
-│   ├── derive/
+│   ├── design/
 │   ├── prd/
+│   ├── report/
 │   ├── workshop/
 │   └── ui/
 ├── lib/
@@ -218,16 +248,18 @@ import { cookies } from 'next/headers'
 
 `src/lib/supabase/proxy.ts` — Supabase Auth session refresh utility:
 - `createServerClient`를 사용해 request/response cookie를 갱신한다.
-- facilitator 보호 로직은 이후 step에서 `supabase.auth.getClaims()` 또는 `supabase.auth.getUser()`로 재검증한다.
+- **역할**: Next.js middleware에서 호출되어, 매 요청마다 퍼실리테이터의 Supabase Auth 토큰을 자동 갱신(refresh)한다. 참석자 guest session과는 무관.
+- `updateSession(request)` 함수를 export한다. 이 함수 내에서 `createServerClient`로 Supabase 클라이언트를 생성하고 `supabase.auth.getUser()`를 호출하여 세션 유효성을 검증한다.
+- facilitator 보호 로직은 이후 step에서 `supabase.auth.getUser()`로 재검증한다.
 - 서버 보호 로직에서 `supabase.auth.getSession()`만으로 권한을 판단하지 않도록 주석과 테스트 TODO를 남긴다.
 
-루트 `proxy.ts`:
+`src/middleware.ts` (Next.js Middleware):
 - `updateSession(request)`를 호출한다.
 - matcher는 `_next/static`, `_next/image`, favicon, 정적 이미지 파일을 제외한다.
 - API route는 기본적으로 matcher 범위에 포함한다. 추후 성능상 좁히더라도 withFacilitator가 자체 재검증을 수행해야 한다.
 
 주의:
-- 이 proxy는 퍼실리테이터 Supabase Auth 세션 refresh용이다.
+- 이 middleware + proxy는 퍼실리테이터 Supabase Auth 세션 refresh 전용이다.
 - 참석자 guest session은 Step 2의 signed cookie로 별도 구현한다.
 - 두 세션 모델을 하나의 쿠키나 하나의 secret으로 합치지 않는다.
 
@@ -237,7 +269,7 @@ import { cookies } from 'next/headers'
 - 다크모드 기본 (`<html className="dark">`)
 - 기본 폰트: Inter 또는 Geist Sans
 - 메타데이터: title "Workshop Agent"
-- `<Toaster />`는 Step 9에서 root layout에 한 번만 추가한다. 이 step에서 추가한다면 중복 mount가 생기지 않게 이후 step에서 확인한다.
+- `<Toaster />` 컴포넌트를 root layout에 마운트하라 (`import { Toaster } from 'sonner'`). CLAUDE.md 규칙: root layout에 한 번만 마운트. Step 2 이후에서 `toast()` 호출이 가능하려면 이 step에서 반드시 추가해야 한다.
 
 `src/app/page.tsx`를 최소한의 랜딩 페이지로 교체하라:
 - "Workshop Agent" 제목
@@ -267,12 +299,13 @@ docker build -t workshop-agent . # Foundation Docker baseline 빌드 성공
 - `node --version`이 Foundation 기준(Node 20 LTS)과 일치하는지 확인하라.
 - `npm ls next react react-dom tldraw @supabase/ssr`로 핵심 패키지 설치 상태를 확인하라.
 - `GET /api/health`가 `{ data: { status: 'ok', time } }` 형태로 200을 반환하는지 확인하라.
+- `<Toaster />`가 `src/app/layout.tsx`에 마운트되어 있는지 확인하라 (`sonner` import 존재).
 - `rg "SUPABASE_SERVICE_ROLE_KEY|AZURE_OPENAI_API_KEY|SESSION_SECRET" src/app src/components` 결과가 client 노출 위험을 만들지 않는지 확인하라.
 
 ## 금지사항
 
 - 실제 Supabase 프로젝트를 생성하거나 DB 마이그레이션을 실행하지 마라. 이 step에서는 Supabase 관련 클라이언트/proxy 설정 코드만 작성한다.
 - Azure OpenAI 연동 코드를 작성하지 마라. 이 step에서는 환경 변수 예시 파일만 만든다.
-- 실제 secret 값을 `.env.local.example`에 넣지 마라.
+- 실제 secret 값을 `.env.example`에 넣지 마라.
 - `create-next-app@latest`로 생성하지 마라.
 - `@tldraw/tldraw` 패키지를 설치하지 마라.

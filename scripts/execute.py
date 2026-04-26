@@ -4,6 +4,9 @@ Harness Step Executor — phase 내 step을 순차 실행하고 자가 교정한
 
 Usage:
     python3 scripts/execute.py <phase-dir> [--push]
+
+환경 변수:
+    HARNESS_TZ_OFFSET  타임스탬프 기록 시간대 오프셋 (기본값: 9 = UTC+9/KST)
 """
 
 import argparse
@@ -56,7 +59,7 @@ class StepExecutor:
     MAX_RETRIES = 3
     FEAT_MSG = "feat({phase}): step {num} — {name}"
     CHORE_MSG = "chore({phase}): step {num} output"
-    TZ = timezone(timedelta(hours=9))
+    TZ = timezone(timedelta(hours=int(os.environ.get("HARNESS_TZ_OFFSET", "9"))))
 
     def __init__(self, phase_dir_name: str, *, auto_push: bool = False):
         self._root = str(ROOT)
@@ -220,7 +223,11 @@ class StepExecutor:
             f"   - AC 통과 → \"completed\" + \"summary\" 필드에 이 step의 산출물을 한 줄로 요약\n"
             f"   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → \"error\" + \"error_message\" 기록\n"
             f"   - 사용자 개입이 필요한 경우 (API 키, 인증, 수동 설정 등) → \"blocked\" + \"blocked_reason\" 기록 후 즉시 중단\n"
-            f"6. 모든 변경사항을 커밋하라:\n"
+            f"6. 모든 변경사항 완료 후 반드시 다음을 실행하여 통과를 확인하라:\n"
+            f"   npm run lint && npm run typecheck && npm run test && npm run build\n"
+            f"7. Docker 빌드도 성공해야 한다:\n"
+            f"   docker build -t workshop-agent .\n"
+            f"8. 모든 변경사항을 커밋하라:\n"
             f"   {commit_example}\n\n---\n\n"
         )
 
@@ -235,10 +242,22 @@ class StepExecutor:
             sys.exit(1)
 
         prompt = preamble + step_file.read_text()
-        result = subprocess.run(
-            ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
-            cwd=self._root, capture_output=True, text=True, timeout=1800,
-        )
+
+        # --dangerously-skip-permissions: Harness가 자동 실행 모드이므로 사용자 확인 프롬프트를
+        # 건너뛴다. 이 플래그 없이는 매 step마다 수동 승인이 필요하여 자동화 불가.
+        # 보안: Harness는 로컬 개발 환경에서만 실행되며, 프로덕션에서 사용하지 않는다.
+        try:
+            result = subprocess.run(
+                ["claude", "-p", "--dangerously-skip-permissions", "--output-format", "json", prompt],
+                cwd=self._root, capture_output=True, text=True, timeout=1800,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"\n  ✗ Step {step_num}: Claude CLI 타임아웃 (1800초 초과)")
+            return {
+                "step": step_num, "name": step_name,
+                "exitCode": -1,
+                "stdout": "", "stderr": "TimeoutExpired: Claude CLI exceeded 1800s",
+            }
 
         if result.returncode != 0:
             print(f"\n  WARN: Claude가 비정상 종료됨 (code {result.returncode})")
@@ -267,6 +286,14 @@ class StepExecutor:
         print(f"{'='*60}")
 
     def _check_blockers(self):
+        # claude CLI 존재 확인
+        try:
+            subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=10)
+        except FileNotFoundError:
+            print("\n  ERROR: 'claude' CLI가 설치되어 있지 않습니다.")
+            print("  설치: https://docs.anthropic.com/en/docs/claude-cli")
+            sys.exit(1)
+
         index = self._read_json(self._index_file)
         for s in reversed(index["steps"]):
             if s["status"] == "error":
@@ -297,6 +324,11 @@ class StepExecutor:
         prev_error = None
 
         for attempt in range(1, self.MAX_RETRIES + 1):
+            if attempt > 1:
+                delay = 1 * (2 ** (attempt - 2))  # 1s, 2s exponential backoff
+                print(f"  ⏳ {delay}초 대기 후 재시도...")
+                time.sleep(delay)
+
             index = self._read_json(self._index_file)
             step_context = self._build_step_context(index)
             preamble = self._build_preamble(guardrails, step_context, prev_error)

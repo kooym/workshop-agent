@@ -18,6 +18,7 @@ Foundation Cluster의 세부 평가와 개선 계획은 `docs/FOUNDATION_ASSESSM
 - Supabase Auth session refresh proxy scaffold
 - Dockerfile, `.dockerignore`, `next.config.ts`
 - `/api/health` liveness endpoint
+- `src/lib/api/response.ts` API 표준 응답/에러 코드 상수 (12개: VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, PROCESSING, STAGE_LOCKED, STALE_LOCK, VOTE_LIMIT, PARTICIPANT_LIMIT, NOTE_LIMIT, INTERNAL_ERROR)
 - package scripts: `dev`, `lint`, `typecheck`, `test`, `build`
 - Azure App Service/ACR 배포 전제
 - dependency compatibility matrix

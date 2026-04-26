@@ -106,6 +106,8 @@
 - AI prompt/schema 영향
 - migration/backfill 필요 여부
 - 운영/복구 절차 영향
+- stale 데이터 전파 (`propagateStale`) 영향: 새 리소스 수정이 하류 AI 산출물을 무효화하는지 확인
+- `viewingStage` 자유 네비게이션 영향: 새 단계/화면이 StageNav에 적절히 노출되는지 확인
 
 ## 5. 금지 패턴
 
@@ -114,8 +116,8 @@
 - 도메인 API에서 Zod 검증 생략
 - UI에서만 권한을 막고 API 검증을 생략
 - `dangerouslySetInnerHTML`로 Markdown 렌더링
-- 하나의 PR에서 auth, schema, AI prompt, UI 대규모 변경을 모두 섞기
-
+- 하나의 PR에서 auth, schema, AI prompt, UI 대규모 변경을 모두 섞기- Rate Limiting 우회: 인증/초대코드 API에 IP 기반 제한 없이 배포
+- Stale 전파 누락: 이전 단계 데이터 수정 API에서 `propagateStale` 호출 없이 배포
 ## 6. 확장 완료 정의
 
 새 기능은 다음이 모두 완료되어야 한다.

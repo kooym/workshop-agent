@@ -38,7 +38,7 @@ Foundation Cluster의 현재 준비도, gap register, 개선 우선순위는 `do
 - 핵심 dependency 변경은 compatibility review와 lockfile diff 검토를 통과해야 한다.
 - API 에러는 JSON 구조화 로깅한다.
 - secret은 클라이언트 번들에 포함하지 않는다.
-- `.env*` 실제 값 파일은 커밋하지 않는다. `.env.local.example`만 허용한다.
+- `.env*` 실제 값 파일은 커밋하지 않는다. 환경 변수 템플릿은 `.env.example`만 허용한다.
 - CI는 `npm ci`를 사용한다.
 - Health check path는 `/api/health`로 표준화한다.
 - blocked는 API 키/외부 인증/수동 설정 필요 시에만 사용한다.

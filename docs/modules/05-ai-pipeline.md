@@ -10,8 +10,9 @@
 - `src/lib/ai/prompts.ts`
 - `src/lib/ai/schemas.ts`
 - `/api/ai/cluster`
-- `/api/ai/derive`
+- `/api/ai/design`
 - `/api/ai/generate`
+- `/api/ai/report`
 - processing lock helper
 - retry/timeout/max_tokens policy
 
@@ -20,8 +21,11 @@
 - `clusters` 생성/재생성
 - `notes.cluster_id` 배정
 - `workshops.is_processing` AI 실행 중 lock 토글
+- `workshops.is_processing_since` 타임스탬프 (AI 시작 시 설정, 완료/실패 시 null로 복구. 5분 초과 시 M2에서 stale lock 자동 해제)
+- `design_artifacts` 생성 (AI Design 단계)
+- `ax_reports` 생성 (AI Report 단계)
 
-M5는 `ax_tasks`와 `prds`를 생성할 수 있지만, 산출물의 일반 CRUD 소유권은 M7에 있다.
+M5는 `ax_tasks`, `prds`, `design_artifacts`, `ax_reports`를 생성할 수 있지만, 산출물의 일반 CRUD 소유권은 M7에 있다.
 
 ## 소유하지 않는 것
 
@@ -36,14 +40,18 @@ M5는 `ax_tasks`와 `prds`를 생성할 수 있지만, 산출물의 일반 CRUD 
 - 모든 AI 호출은 JSON mode를 사용한다.
 - 응답은 Zod schema와 사후 무결성 검증을 통과해야 한다.
 - `is_processing`은 try/finally로 반드시 복구한다.
+- AI 재실행 완료 시 해당 산출물 + 하류 산출물의 `is_stale = false` 일괄 해제.
+- 클러스터링 재실행: `cluster_id IS NULL`인 미할당 노트만 대상. 기존 클러스터를 컨텍스트로 포함.
 - timeout:
   - clustering: 30초
-  - derivation: 30초
+  - design: 30초
   - PRD generation: 60초
+  - report generation: 60초
 - max_tokens:
   - clustering: 2000
-  - derivation: 3000
+  - design: 4000
   - PRD generation: 8000
+  - report generation: 10000
 
 ## 확장 포인트
 
@@ -60,8 +68,11 @@ M5는 `ax_tasks`와 `prds`를 생성할 수 있지만, 산출물의 일반 CRUD 
 - malformed JSON
 - schema failure
 - clustering missing/duplicate note id
-- derivation invalid cluster mapping
+- design invalid cluster mapping
+- design_artifacts 생성/버전 검증
 - PRD empty/truncated content
+- report empty/truncated content
+- ax_reports 생성/버전 검증
 - is_processing recovery on every failure
 
 ## 운영 고려사항

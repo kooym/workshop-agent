@@ -2,9 +2,21 @@
 
 ## 위치
 
-- 원본: `/Users/youngmokoo/Documents/nemotron-persona-ko-kr-dataset/ko_KR.parquet`
+- 원본: 로컬 머신의 `ko_KR.parquet` 파일 (각 환경별로 위치 상이)
 - 프로젝트 등록 경로: `datasets/nemotron-persona-ko-kr/ko_KR.parquet`
-- 등록 방식: 원본 파일을 복사하지 않고 symlink로 연결
+- 등록 방식: 외부 파일을 symlink 또는 복사하여 등록
+
+### 설정 방법
+
+```bash
+# macOS/Linux
+ln -s /path/to/ko_KR.parquet datasets/nemotron-persona-ko-kr/ko_KR.parquet
+
+# Windows (관리자 권한 필요)
+mklink datasets\nemotron-persona-ko-kr\ko_KR.parquet C:\path\to\ko_KR.parquet
+```
+
+> ⚠ `ko_KR.parquet` (2.66 GiB)은 `.gitignore`에 등록되어 있으므로 git에 포함되지 않는다.
 
 ## 파일 요약
 
