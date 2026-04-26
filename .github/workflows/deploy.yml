@@ -1,0 +1,169 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment target'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  ACR_NAME: ${{ vars.ACR_NAME }}
+  APP_NAME: ${{ vars.APP_NAME }}
+  RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+  IMAGE_NAME: workshop-agent
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Generate image tag
+        id: meta
+        run: echo "tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Login to ACR
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ env.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }} .
+          docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }} \
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-and-push
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_NAME }}
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          images: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
+
+      - name: Wait for deployment and health check
+        run: |
+          echo "Waiting for app to become healthy..."
+          APP_URL="https://${{ env.APP_NAME }}.azurewebsites.net"
+          for i in $(seq 1 60); do
+            RESPONSE=$(curl -s "$APP_URL/api/health" 2>/dev/null || echo "")
+            STATUS_FIELD=$(echo "$RESPONSE" | jq -r '.data.status // empty' 2>/dev/null)
+            if [ "$STATUS_FIELD" = "ok" ]; then
+              echo "✓ App is healthy (attempt $i)"
+              echo "Response: $RESPONSE"
+              exit 0
+            fi
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/api/health" 2>/dev/null || echo "000")
+            echo "Attempt $i: HTTP $HTTP_CODE, status='$STATUS_FIELD', retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::App failed to become healthy after 5 minutes"
+          exit 1
+
+      - name: Tag stable image on success
+        if: success()
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ env.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Run smoke test
+        if: success()
+        run: |
+          APP_URL="https://${{ env.APP_NAME }}.azurewebsites.net"
+          echo "Running smoke test against $APP_URL..."
+          if [ -f scripts/smoke-test.sh ]; then
+            bash scripts/smoke-test.sh "$APP_URL"
+          else
+            echo "smoke-test.sh not found, skipping extended smoke test"
+          fi
+
+      - name: Push stable tag
+        if: success()
+        run: |
+          docker pull ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }}
+          docker tag ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.image-tag }} \
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest-stable
+          docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest-stable
+          echo "✓ Tagged ${{ needs.build-and-push.outputs.image-tag }} as latest-stable"
+          echo "Health check passed (200)"
+
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build-and-push, deploy]
+    if: failure() && needs.deploy.result == 'failure'
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Rollback to previous image
+        run: |
+          echo "::warning::Deployment failed. Rolling back to previous stable image."
+          # Verify latest-stable tag exists before rollback
+          STABLE_IMAGE="${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest-stable"
+          if ! az acr repository show-tags --name ${{ env.ACR_NAME }} --repository ${{ env.IMAGE_NAME }} --query "[?@=='latest-stable']" -o tsv | grep -q latest-stable; then
+            echo "::error::Stable image tag 'latest-stable' not found in ACR. Manual recovery required."
+            exit 1
+          fi
+          az webapp config container set \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --container-image-name "$STABLE_IMAGE"
+
+      - name: Restart App Service
+        run: |
+          az webapp restart \
+            --name ${{ env.APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }}

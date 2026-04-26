@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-typecheck-test-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker build
+        run: docker build -t workshop-agent .
+
+  secret-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+
+      - name: Check for secret leaks in client code
+        run: |
+          # Server-only secrets: CRITICAL violation if referenced in client code
+          RESULT=$(rg "SUPABASE_SERVICE_ROLE_KEY|AZURE_OPENAI_API_KEY|AZURE_OPENAI_ENDPOINT|SESSION_SECRET" \
+            src/app src/components \
+            -g '*.ts' -g '*.tsx' \
+            -l 2>/dev/null || true)
+          if [ -n "$RESULT" ]; then
+            echo "::error::Secret references found in client code:"
+            echo "$RESULT"
+            exit 1
+          fi
+          echo "No secret leaks detected in client code."
+
+      - name: Check for process.env server secret access in client code
+        run: |
+          RESULT=$(rg "process\.env\.(SUPABASE_SERVICE_ROLE_KEY|AZURE_OPENAI_API_KEY|AZURE_OPENAI_ENDPOINT|AZURE_OPENAI_DEPLOYMENT|AZURE_OPENAI_API_VERSION|SESSION_SECRET)" \
+            src/app src/components \
+            -g '*.ts' -g '*.tsx' \
+            -l 2>/dev/null || true)
+          if [ -n "$RESULT" ]; then
+            echo "::error::process.env server secret access found in client code:"
+            echo "$RESULT"
+            exit 1
+          fi
+          echo "No process.env server secret access in client code."
+
+      - name: Check NEXT_PUBLIC_ prefix on server secrets
+        run: |
+          RESULT=$(rg "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_AZURE_OPENAI|NEXT_PUBLIC_SESSION_SECRET" \
+            -g '*.ts' -g '*.tsx' \
+            -l 2>/dev/null || true)
+          if [ -n "$RESULT" ]; then
+            echo "::error::Server secret with NEXT_PUBLIC_ prefix found:"
+            echo "$RESULT"
+            exit 1
+          fi
+          echo "No NEXT_PUBLIC_ prefix on server secrets."
+
+      - name: Check for dangerouslySetInnerHTML usage
+        run: |
+          RESULT=$(rg "dangerouslySetInnerHTML" src/ -g '*.ts' -g '*.tsx' -l 2>/dev/null || true)
+          if [ -n "$RESULT" ]; then
+            echo "::error::dangerouslySetInnerHTML usage found (CRITICAL rule violation):"
+            echo "$RESULT"
+            exit 1
+          fi
+          echo "No dangerouslySetInnerHTML usage found."
+
+      - name: Check .env files not tracked
+        run: |
+          if git ls-files --cached | grep -E '^\.(env|env\.local|env\.production)$'; then
+            echo "::error::.env files are tracked in git!"
+            exit 1
+          fi
+          echo "No .env files tracked in git."

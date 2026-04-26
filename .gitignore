@@ -1,7 +1,6 @@
 node_modules/
 .next/
 out/
-next-env.d.ts
 tsconfig.tsbuildinfo
 dist/
 build/
@@ -10,6 +9,10 @@ build/
 .env
 .env.local
 .env.*.local
+.env.production
+
+# security
+*.pem
 
 # phase execution outputs
 phases/**/phase*-output.json
@@ -32,3 +35,13 @@ Thumbs.db
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Supabase local
+.supabase/
+
+# Test coverage
+coverage/
+.vitest/
+
+# Logs
+*.log
