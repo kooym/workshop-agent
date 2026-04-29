@@ -67,6 +67,14 @@ export function DotVoting({
     setStats(payload.data)
   }, [workshop.id])
 
+  // Sync from realtime workshop updates (e.g. facilitator toggles results_visible)
+  useEffect(() => {
+    setResultsVisible(workshop.settings.results_visible)
+    if (workshop.settings.results_visible) {
+      void refetchResults()
+    }
+  }, [workshop.settings.results_visible, refetchResults])
+
   useEffect(() => {
     void Promise.all([
       refetchClusters(workshop.id),
@@ -115,16 +123,16 @@ export function DotVoting({
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 p-6">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-neutral-800 pb-4">
+    <main className="min-h-screen bg-canvas-parchment p-6">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-hairline pb-4">
         <div>
-          <p className="text-sm text-neutral-500">현재 보는 단계</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal">vote</h2>
-          <p className="mt-2 text-sm text-neutral-400">
+          <p className="text-sm text-ink-muted-48">현재 보는 단계</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-normal">우선순위 결정</h2>
+          <p className="mt-2 text-sm text-ink-muted-48">
             {votesPerPerson}표 중 {usedVotes}표 사용
           </p>
           {isFacilitator && stats ? (
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-muted-48">
               {stats.voted_participants}/{stats.total_participants}명 투표 완료 ·{' '}
               {stats.participation_rate}%
             </p>
@@ -135,7 +143,7 @@ export function DotVoting({
             type="button"
             onClick={() => void revealResults()}
             disabled={isBusy}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-sky-600 px-4 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+            className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-canvas-parchment disabled:text-ink-muted-48"
           >
             {isBusy ? (
               <Loader2 aria-hidden className="h-4 w-4 animate-spin" />

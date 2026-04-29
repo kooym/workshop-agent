@@ -15,5 +15,8 @@ export interface AxTask extends Entity, Timestamped {
   pain_points: Json
   core_features: Json
   sub_features: Json
+  is_selected: boolean
+  is_bundle: boolean
+  bundle_id: string | null
   order_index: number
 }

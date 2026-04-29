@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { createRateLimiter, getClientIp } from '@/lib/api/rate-limit'
 import { API_ERROR_CODES, error, success } from '@/lib/api/response'
 import { signupSchema } from '@/lib/api/validators'
-import { createServerClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 const signupLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10 })
 
@@ -18,20 +18,26 @@ export async function POST(req: NextRequest) {
     return error(API_ERROR_CODES.VALIDATION_ERROR, '회원가입 정보를 확인해주세요.', 400)
   }
 
-  const supabase = await createServerClient()
-  const { data, error: authError } = await supabase.auth.signUp({
+  // Use service_role admin API to create user with email auto-confirmed.
+  // Email confirmation is redundant since we use admin approval as the gate.
+  const service = createServiceRoleClient()
+  const { data, error: authError } = await service.auth.admin.createUser({
     email: parsed.data.email,
     password: parsed.data.password,
-    options: {
-      data: {
-        name: parsed.data.name,
-      },
+    email_confirm: true,
+    user_metadata: {
+      name: parsed.data.name,
+      role: 'facilitator',
+      approved: false,
     },
   })
 
   if (authError) {
-    return error(API_ERROR_CODES.VALIDATION_ERROR, authError.message, authError.status ?? 400)
+    const msg = authError.message.includes('already been registered')
+      ? '이미 등록된 이메일입니다.'
+      : authError.message
+    return error(API_ERROR_CODES.VALIDATION_ERROR, msg, authError.status ?? 400)
   }
 
-  return success({ user: data.user })
+  return success({ user: data.user, pending_approval: true })
 }

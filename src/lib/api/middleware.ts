@@ -29,6 +29,35 @@ export type FacilitatorAuthContext = {
 
 export type AuthContext = ParticipantAuthContext | FacilitatorAuthContext
 
+export type AdminContext = {
+  user: User
+  service: ServiceClient
+}
+
+export async function withAdmin(
+  req: NextRequest,
+  handler: (req: NextRequest, context: AdminContext) => Promise<NextResponse> | NextResponse,
+) {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return error(API_ERROR_CODES.UNAUTHORIZED, '로그인이 필요합니다.', 401)
+  }
+
+  if (user.user_metadata?.role !== 'admin') {
+    return error(API_ERROR_CODES.FORBIDDEN, '관리자 권한이 필요합니다.', 403)
+  }
+
+  return handler(req, {
+    user,
+    service: createServiceRoleClient(),
+  })
+}
+
 export async function withFacilitator(
   req: NextRequest,
   handler: (req: NextRequest, context: FacilitatorContext) => Promise<NextResponse> | NextResponse,
@@ -60,6 +89,46 @@ export async function withAuth(
   }
 
   const service = createServiceRoleClient()
+
+  // Guest cookie first — same browser shares Supabase Auth cookies,
+  // so a guest tab must resolve via its own cookie, not the facilitator's Auth session.
+  const cookieValue = req.cookies.get(PARTICIPANT_SESSION_COOKIE)?.value
+  const session = cookieValue ? verifySession(cookieValue) : null
+
+  if (session && session.workshopId === workshopId) {
+    const { data: guestParticipant } = await service
+      .from('participants')
+      .select('*')
+      .eq('id', session.participantId)
+      .eq('workshop_id', workshopId)
+      .single()
+
+    if (guestParticipant) {
+      // If the guest participant is actually a facilitator (e.g. facilitator also has a cookie),
+      // resolve as facilitator to preserve AuthContext typing.
+      if (guestParticipant.is_facilitator && guestParticipant.user_id) {
+        const supabase = await createServerClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          return handler(req, {
+            actor: 'facilitator',
+            user,
+            participant: guestParticipant,
+            workshopId,
+            service,
+          })
+        }
+      }
+      return handler(req, {
+        actor: 'participant',
+        participant: guestParticipant,
+        workshopId,
+        service,
+      })
+    }
+  }
+
+  // Fallback: Supabase Auth (facilitator)
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -80,33 +149,7 @@ export async function withAuth(
     })
   }
 
-  const cookieValue = req.cookies.get(PARTICIPANT_SESSION_COOKIE)?.value
-  const session = cookieValue ? verifySession(cookieValue) : null
-  if (!session) {
-    return error(API_ERROR_CODES.UNAUTHORIZED, '유효하지 않은 세션입니다.', 401)
-  }
-
-  if (session.workshopId !== workshopId) {
-    return error(API_ERROR_CODES.FORBIDDEN, '워크샵 세션이 일치하지 않습니다.', 403)
-  }
-
-  const { data: participant, error: participantError } = await service
-    .from('participants')
-    .select('*')
-    .eq('id', session.participantId)
-    .eq('workshop_id', workshopId)
-    .single()
-
-  if (participantError || !participant) {
-    return error(API_ERROR_CODES.UNAUTHORIZED, '참석자 세션을 찾을 수 없습니다.', 401)
-  }
-
-  return handler(req, {
-    actor: 'participant',
-    participant,
-    workshopId,
-    service,
-  })
+  return error(API_ERROR_CODES.UNAUTHORIZED, '유효하지 않은 세션입니다.', 401)
 }
 
 function getWorkshopIdFromRequest(req: NextRequest) {

@@ -1,40 +1,195 @@
 'use client'
 
+import { Pencil, Save, X } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import type { Json } from '@/types/common'
 
-export function DataRequirementTable({ value }: { value: Json }) {
-  const rows = Array.isArray(value) ? value.filter(isRecord) : []
+type JsonRecord = { [key: string]: Json | undefined }
+
+type DataRow = {
+  name: string
+  source: string
+  format: string
+  volume: string
+  responsible_team: string
+}
+
+export function DataRequirementTable({
+  value,
+  canEdit = false,
+  workshopId,
+  onChanged,
+}: {
+  value: Json
+  canEdit?: boolean
+  workshopId?: string
+  onChanged?(): void
+}) {
+  const rows = toRows(value)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editData, setEditData] = useState<DataRow[]>(rows)
+  const [isSaving, setIsSaving] = useState(false)
+
+  function startEditing() {
+    setEditData(toRows(value))
+    setIsEditing(true)
+  }
+
+  function cancelEditing() {
+    setEditData(rows)
+    setIsEditing(false)
+  }
+
+  function updateRow(index: number, field: keyof DataRow, fieldValue: string) {
+    setEditData((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [field]: fieldValue } : row)),
+    )
+  }
+
+  async function saveData() {
+    if (!workshopId) return
+    setIsSaving(true)
+    const response = await fetch(`/api/workshops/${workshopId}/design-artifacts`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data_requirements: editData }),
+    })
+    setIsSaving(false)
+    if (!response.ok) {
+      toast.error('데이터 요구사항을 저장하지 못했습니다.')
+      return
+    }
+    setIsEditing(false)
+    onChanged?.()
+    toast.success('데이터 요구사항을 저장했습니다.')
+  }
+
+  const displayRows = isEditing ? editData : rows
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-800">
-      <table className="w-full border-collapse text-sm">
-        <thead className="bg-neutral-900 text-left text-neutral-400">
-          <tr>
-            <th className="px-4 py-3">데이터</th>
-            <th className="px-4 py-3">소스</th>
-            <th className="px-4 py-3">형태</th>
-            <th className="px-4 py-3">규모</th>
-            <th className="px-4 py-3">담당팀</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={index} className="border-t border-neutral-800">
-              <td className="px-4 py-3 text-white">{String(row.name ?? '')}</td>
-              <td className="px-4 py-3 text-neutral-300">{String(row.source ?? '')}</td>
-              <td className="px-4 py-3 text-neutral-300">{String(row.format ?? '')}</td>
-              <td className="px-4 py-3 text-neutral-400">{String(row.volume ?? row.scale ?? '')}</td>
-              <td className="px-4 py-3 text-neutral-400">
-                {String(row.responsible_team ?? row.owner ?? '')}
-              </td>
+    <section className="space-y-4">
+      {canEdit ? (
+        <div className="flex justify-end gap-2">
+          {isEditing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void saveData()}
+                disabled={isSaving}
+                className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-3 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-canvas-parchment disabled:text-ink-muted-48"
+              >
+                <Save aria-hidden className="h-4 w-4" />
+                저장
+              </button>
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-hairline px-3 text-sm text-ink-muted-80 hover:bg-canvas-parchment"
+              >
+                <X aria-hidden className="h-4 w-4" />
+                취소
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={startEditing}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-hairline px-3 text-sm text-ink-muted-80 hover:bg-canvas-parchment"
+            >
+              <Pencil aria-hidden className="h-4 w-4" />
+              편집
+            </button>
+          )}
+        </div>
+      ) : null}
+
+      <div className="overflow-hidden rounded-apple-lg border border-hairline">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-canvas-parchment text-left text-ink-muted-48">
+            <tr>
+              <th className="px-4 py-3">데이터</th>
+              <th className="px-4 py-3">소스</th>
+              <th className="px-4 py-3">형태</th>
+              <th className="px-4 py-3">규모</th>
+              <th className="px-4 py-3">담당팀</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {displayRows.map((row, index) => (
+              <tr key={index} className="border-t border-hairline">
+                {isEditing ? (
+                  <>
+                    <td className="px-3 py-2">
+                      <input
+                        value={row.name}
+                        onChange={(e) => updateRow(index, 'name', e.target.value)}
+                        maxLength={100}
+                        className="h-8 w-full rounded border border-hairline bg-canvas-parchment px-2 text-sm text-ink outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={row.source}
+                        onChange={(e) => updateRow(index, 'source', e.target.value)}
+                        maxLength={200}
+                        className="h-8 w-full rounded border border-hairline bg-canvas-parchment px-2 text-sm text-ink outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={row.format}
+                        onChange={(e) => updateRow(index, 'format', e.target.value)}
+                        maxLength={100}
+                        className="h-8 w-full rounded border border-hairline bg-canvas-parchment px-2 text-sm text-ink outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={row.volume}
+                        onChange={(e) => updateRow(index, 'volume', e.target.value)}
+                        maxLength={100}
+                        className="h-8 w-full rounded border border-hairline bg-canvas-parchment px-2 text-sm text-ink outline-none focus:border-primary"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={row.responsible_team}
+                        onChange={(e) => updateRow(index, 'responsible_team', e.target.value)}
+                        maxLength={100}
+                        className="h-8 w-full rounded border border-hairline bg-canvas-parchment px-2 text-sm text-ink outline-none focus:border-primary"
+                      />
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-4 py-3 text-ink">{row.name}</td>
+                    <td className="px-4 py-3 text-ink-muted-80">{row.source}</td>
+                    <td className="px-4 py-3 text-ink-muted-80">{row.format}</td>
+                    <td className="px-4 py-3 text-ink-muted-48">{row.volume}</td>
+                    <td className="px-4 py-3 text-ink-muted-48">{row.responsible_team}</td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function toRows(value: Json): DataRow[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(isJsonRecord).map((row) => ({
+    name: String(row.name ?? ''),
+    source: String(row.source ?? ''),
+    format: String(row.format ?? ''),
+    volume: String(row.volume ?? row.scale ?? ''),
+    responsible_team: String(row.responsible_team ?? row.owner ?? ''),
+  }))
+}
+
+function isJsonRecord(value: Json): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

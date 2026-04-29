@@ -65,8 +65,32 @@
       "summary": "Vote create/delete/list APIs, vote results and participation stats APIs, vote policy helpers/tests, voteStore, DotVoting/VotingCard/VoteResult UI, results reveal control, votes Realtime subscription, and vote-stage workshop UI integration added.",
       "known_issues": "Realtime and DB constraints were not exercised against a live Supabase instance because Docker Desktop/daemon remains unavailable. Result visibility and vote aggregation are covered by unit tests and build-time integration."
     },
-    { "step": 7, "name": "ax-design", "status": "pending" },
-    { "step": 8, "name": "output-generation", "status": "pending" },
-    { "step": 9, "name": "stage-flow", "status": "pending" }
+    {
+      "step": 7,
+      "name": "ax-design",
+      "status": "completed",
+      "started_at": "2026-04-26T22:08:00+09:00",
+      "completed_at": "2026-04-27T08:57:27+09:00",
+      "summary": "AX design prompt/schema/API, design artifact and task management APIs, reactions API, DesignView six-tab UI, Mermaid and React Flow TO-BE views with facilitator graph edit/save, design/task/reaction Realtime refresh, and AI design route lock/recovery tests added.",
+      "known_issues": "Live Azure OpenAI calls, Supabase DB/Realtime E2E, and Docker build remain unverified because network access is restricted and Docker Desktop/daemon is unavailable. Current Node is v25.6.0 while the project standard is Node 20 LTS."
+    },
+    {
+      "step": 8,
+      "name": "output-generation",
+      "status": "completed",
+      "started_at": "2026-04-27T09:00:00+09:00",
+      "completed_at": "2026-04-27T09:19:38+09:00",
+      "summary": "PRD and AX report prompts, Markdown content schema validation, AI generation APIs, versioned prd/report APIs, Mermaid Markdown renderer, PRD/report preview-editor screens, Markdown copy, and PRD reactions were added.",
+      "known_issues": "Live Azure OpenAI output generation and Supabase DB/Realtime E2E were not verified in this environment. AI content generation is covered by mocked helper tests and build-time integration."
+    },
+    {
+      "step": 9,
+      "name": "stage-flow",
+      "status": "completed",
+      "started_at": "2026-04-27T09:00:00+09:00",
+      "completed_at": "2026-04-27T09:19:38+09:00",
+      "summary": "Stage transition prerequisites, workshop summary API, StageNav icons/free navigation/confirm modal/stale badges, invite code sharing, timer controls, stage guide and stale banners, completed journey summary, and release gate checks were added.",
+      "known_issues": "`docker build -t workshop-agent .` was attempted with Docker access and reached Docker buildx, but hung at node:20-alpine metadata resolution and was cancelled after an extended wait. Docker image smoke test remains unverified. Current Node is v25.6.0 while the project standard is Node 20 LTS."
+    }
   ]
 }

@@ -3,13 +3,15 @@ import { devtools } from 'zustand/middleware'
 import type { Tables } from '@/lib/supabase/types'
 
 interface DesignStore {
-  designArtifact: Tables<'design_artifacts'> | null
+  designArtifacts: Tables<'design_artifacts'>[]
   tasks: Tables<'ax_tasks'>[]
+  selectedAlternativeIndex: number
   reactionRevision: number
   setDesignPayload(payload: {
-    design_artifact: Tables<'design_artifacts'> | null
+    design_artifacts: Tables<'design_artifacts'>[]
     tasks: Tables<'ax_tasks'>[]
   }): void
+  setSelectedAlternativeIndex(index: number): void
   bumpReactionRevision(): void
   refetchAll(workshopId: string): Promise<void>
 }
@@ -17,15 +19,19 @@ interface DesignStore {
 export const useDesignStore = create<DesignStore>()(
   devtools(
     (set) => ({
-      designArtifact: null,
+      designArtifacts: [],
       tasks: [],
+      selectedAlternativeIndex: 0,
       reactionRevision: 0,
 
       setDesignPayload: (payload) =>
         set({
-          designArtifact: payload.design_artifact,
+          designArtifacts: payload.design_artifacts,
           tasks: payload.tasks,
         }),
+
+      setSelectedAlternativeIndex: (index) =>
+        set({ selectedAlternativeIndex: index }),
 
       bumpReactionRevision: () =>
         set((state) => ({
@@ -40,7 +46,7 @@ export const useDesignStore = create<DesignStore>()(
 
         const payload = await response.json()
         set({
-          designArtifact: payload.data.design_artifact,
+          designArtifacts: payload.data.design_artifacts,
           tasks: payload.data.tasks,
         })
       },

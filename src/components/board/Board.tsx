@@ -1,9 +1,12 @@
 'use client'
 
+import { Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { BoardToolbar, type ProcessOption } from './BoardToolbar'
-import { WhiteboardCanvas } from './WhiteboardCanvas'
+import { NoteBoard } from './NoteBoard'
+import { NoteInputPanel } from './NoteInputPanel'
+import type { ProcessOption } from './BoardToolbar'
+import { TestDataModal } from '@/components/common/TestDataModal'
 import { useBoardStore } from '@/stores/board'
 import { useProcessGraphStore } from '@/stores/process-graph'
 import { useWorkshopStore } from '@/stores/workshop'
@@ -23,6 +26,7 @@ export function Board({
 }) {
   const notes = useBoardStore((state) => state.notes)
   const participants = useWorkshopStore((state) => state.participants)
+  const workshop = useWorkshopStore((state) => state.workshop)
   const refetchNotes = useBoardStore((state) => state.refetchAll)
   const markPending = useBoardStore((state) => state.markPending)
   const clearPending = useBoardStore((state) => state.clearPending)
@@ -30,9 +34,8 @@ export function Board({
   const updateNote = useBoardStore((state) => state.updateNote)
   const removeNote = useBoardStore((state) => state.removeNote)
   const processNodes = useProcessGraphStore((state) => state.nodes)
-  const [selectedColor, setSelectedColor] = useState<NoteColor>('yellow')
-  const [selectedProcessStepId, setSelectedProcessStepId] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [showTestModal, setShowTestModal] = useState(false)
 
   const processOptions = useMemo<ProcessOption[]>(
     () =>
@@ -47,7 +50,7 @@ export function Board({
     void refetchNotes(workshopId)
   }, [refetchNotes, workshopId])
 
-  async function handleAddNote() {
+  async function handleAddNote(content: string, color: NoteColor, processStepId: string | null) {
     if (readOnly || notes.length >= 200) {
       return
     }
@@ -59,11 +62,11 @@ export function Board({
       workshop_id: workshopId,
       participant_id: currentParticipant.id,
       cluster_id: null,
-      process_step_id: selectedProcessStepId || null,
-      content: '새 아이디어',
-      color: selectedColor,
-      position_x: 72 + (notes.length % 5) * 38,
-      position_y: 72 + Math.floor(notes.length / 5) * 38,
+      process_step_id: processStepId,
+      content,
+      color,
+      position_x: 0,
+      position_y: 0,
       created_at: now,
       updated_at: now,
     }
@@ -80,8 +83,8 @@ export function Board({
         workshop_id: workshopId,
         content: nextNote.content,
         color: nextNote.color,
-        position_x: nextNote.position_x,
-        position_y: nextNote.position_y,
+        position_x: 0,
+        position_y: 0,
         process_step_id: nextNote.process_step_id,
       }),
     })
@@ -160,29 +163,51 @@ export function Board({
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-neutral-950">
-      <BoardToolbar
-        selectedColor={selectedColor}
-        selectedProcessStepId={selectedProcessStepId}
-        processOptions={processOptions}
-        noteCount={notes.length}
-        readOnly={readOnly}
-        isCreating={isCreating}
-        onColorChange={setSelectedColor}
-        onProcessStepChange={setSelectedProcessStepId}
-        onAddNote={handleAddNote}
-      />
-      <WhiteboardCanvas
-        workshopId={workshopId}
+    <main className="flex h-[calc(100vh-48px)] bg-canvas-parchment">
+      {/* Left panel — post-it input */}
+      <aside className="flex w-80 shrink-0 flex-col border-r border-hairline p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-medium text-ink-muted-80">아이디어 입력</h3>
+          {currentParticipant.is_facilitator && !readOnly && (
+            <button
+              type="button"
+              onClick={() => setShowTestModal(true)}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-600 hover:bg-amber-50"
+            >
+              <Sparkles aria-hidden className="h-3.5 w-3.5" strokeWidth={1.5} />
+              테스트
+            </button>
+          )}
+        </div>
+        <NoteInputPanel
+          processOptions={processOptions}
+          noteCount={notes.length}
+          readOnly={readOnly}
+          isCreating={isCreating}
+          onAdd={handleAddNote}
+        />
+      </aside>
+
+      {/* Right panel — note board */}
+      <NoteBoard
         notes={notes}
         participants={participants}
         currentParticipantId={currentParticipant.id}
         isFacilitator={currentParticipant.is_facilitator}
+        anonymous={workshop?.settings?.anonymous ?? false}
         processOptions={processOptions}
         readOnly={readOnly}
         onPatchNote={handlePatchNote}
         onDeleteNote={handleDeleteNote}
       />
+      {showTestModal && (
+        <TestDataModal
+          workshopId={workshopId}
+          mode="notes"
+          onClose={() => setShowTestModal(false)}
+          onComplete={() => void refetchNotes(workshopId)}
+        />
+      )}
     </main>
   )
 }

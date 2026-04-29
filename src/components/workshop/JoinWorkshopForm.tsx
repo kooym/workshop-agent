@@ -79,16 +79,16 @@ export function JoinWorkshopForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-semibold tracking-normal text-white">Workshop Agent</h1>
+        <h1 className="text-3xl font-semibold tracking-normal text-ink">Workshop Agent</h1>
       </div>
 
       {!preview ? (
-        <form onSubmit={handlePreview} className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+        <form onSubmit={handlePreview} className="space-y-4 rounded-apple-lg border border-hairline bg-white p-6">
           <div>
-            <h2 className="text-base font-semibold text-white">초대 코드로 참여</h2>
+            <h2 className="text-base font-semibold text-ink">초대 코드로 참여</h2>
           </div>
           <div className="space-y-2">
-            <label htmlFor="invite-code" className="block text-sm font-medium text-neutral-200">
+            <label htmlFor="invite-code" className="block text-sm font-medium text-ink">
               초대 코드
             </label>
             <input
@@ -97,40 +97,40 @@ export function JoinWorkshopForm() {
               onChange={(event) => handleCodeChange(event.target.value)}
               maxLength={6}
               placeholder="ABC123"
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-center font-mono text-lg tracking-normal text-white outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+              className="w-full rounded-md border border-hairline bg-canvas-parchment px-3 py-2 text-center font-mono text-lg tracking-normal text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               required
             />
           </div>
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <button
             type="submit"
             disabled={isLoading || inviteCode.length !== 6}
-            className="w-full rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
+            className="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-neutral-200"
           >
             {isLoading ? '확인 중' : '확인'}
           </button>
         </form>
       ) : (
-        <form onSubmit={handleJoin} className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+        <form onSubmit={handleJoin} className="space-y-4 rounded-apple-lg border border-hairline bg-white p-6">
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-normal text-neutral-500">
+            <p className="text-xs font-medium uppercase tracking-normal text-ink-muted-48">
               {preview.current_stage}
             </p>
-            <h2 className="text-lg font-semibold text-white">{preview.title}</h2>
+            <h2 className="text-lg font-semibold text-ink">{preview.title}</h2>
             {preview.description ? (
-              <p className="text-sm leading-6 text-neutral-400">{preview.description}</p>
+              <p className="text-sm leading-6 text-ink-muted-48">{preview.description}</p>
             ) : null}
           </div>
 
-          <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-300">
+          <div className="rounded-md border border-hairline bg-canvas-parchment px-3 py-2 text-sm text-ink-muted-80">
             참가자 {preview.participant_count}/{preview.max_participants}
             {preview.read_only ? (
-              <span className="ml-2 text-amber-300">종료됨 · 읽기 전용</span>
+              <span className="ml-2 text-amber-600">종료됨 · 읽기 전용</span>
             ) : null}
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="display-name" className="block text-sm font-medium text-neutral-200">
+            <label htmlFor="display-name" className="block text-sm font-medium text-ink">
               이름
             </label>
             <input
@@ -138,13 +138,13 @@ export function JoinWorkshopForm() {
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={50}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+              className="w-full rounded-md border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="role" className="block text-sm font-medium text-neutral-200">
+            <label htmlFor="role" className="block text-sm font-medium text-ink">
               역할/팀
             </label>
             <input
@@ -152,24 +152,24 @@ export function JoinWorkshopForm() {
               value={role}
               onChange={(event) => setRole(event.target.value)}
               maxLength={50}
-              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+              className="w-full rounded-md border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </div>
 
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setPreview(null)}
-              className="w-24 rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
+              className="w-24 rounded-full border border-hairline px-4 py-2 text-sm text-ink hover:bg-canvas-parchment"
             >
               이전
             </button>
             <button
               type="submit"
               disabled={isLoading || !name.trim()}
-              className="flex-1 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
+              className="flex-1 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-neutral-200"
             >
               {isLoading ? '참여 중' : '참여하기'}
             </button>
@@ -177,9 +177,9 @@ export function JoinWorkshopForm() {
         </form>
       )}
 
-      <p className="mt-6 text-center text-sm text-neutral-500">
+      <p className="mt-6 text-center text-sm text-ink-muted-48">
         퍼실리테이터이신가요?{' '}
-        <Link href="/auth/login" className="text-neutral-300 underline-offset-4 hover:underline">
+        <Link href="/auth/login" className="text-ink-muted-80 underline-offset-4 hover:underline">
           로그인
         </Link>
       </p>

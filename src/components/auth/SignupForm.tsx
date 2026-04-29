@@ -1,17 +1,16 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 
 export function SignupForm() {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -41,27 +40,50 @@ export function SignupForm() {
       return
     }
 
-    router.push('/dashboard')
-    router.refresh()
+    // Show pending approval message instead of redirecting
+    setPendingApproval(true)
+  }
+
+  if (pendingApproval) {
+    return (
+      <div className="space-y-4 rounded-apple-lg border border-hairline bg-white p-6 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-ink">회원가입 완료</h2>
+        <p className="text-sm text-ink-muted-48">
+          관리자 승인 대기 중입니다.<br />
+          승인이 완료되면 로그인할 수 있습니다.
+        </p>
+        <Link
+          href="/auth/login"
+          className="inline-block rounded-full border border-hairline px-4 py-2 text-sm text-ink hover:bg-canvas-parchment"
+        >
+          로그인 페이지로 이동
+        </Link>
+      </div>
+    )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-apple-lg border border-hairline bg-white p-6">
       <div className="space-y-2">
-        <label htmlFor="name" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="name" className="block text-sm font-medium text-ink">
           이름
         </label>
         <input
           id="name"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="email" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="email" className="block text-sm font-medium text-ink">
           이메일
         </label>
         <input
@@ -69,13 +91,13 @@ export function SignupForm() {
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="password" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="password" className="block text-sm font-medium text-ink">
           비밀번호
         </label>
         <input
@@ -83,13 +105,13 @@ export function SignupForm() {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="confirm-password" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="confirm-password" className="block text-sm font-medium text-ink">
           비밀번호 확인
         </label>
         <input
@@ -97,24 +119,24 @@ export function SignupForm() {
           type="password"
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
-      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
+        className="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-canvas-parchment disabled:text-ink-muted-48"
       >
         {isSubmitting ? '가입 중' : '회원가입'}
       </button>
 
-      <p className="text-center text-sm text-neutral-400">
+      <p className="text-center text-sm text-ink-muted-48">
         이미 계정이 있으신가요?{' '}
-        <Link href="/auth/login" className="text-neutral-100 underline-offset-4 hover:underline">
+        <Link href="/auth/login" className="text-ink underline-offset-4 hover:underline">
           로그인
         </Link>
       </p>

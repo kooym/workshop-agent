@@ -20,6 +20,7 @@ const workshop: Workshop = {
   },
   is_processing: false,
   is_processing_since: null,
+  design_step: 0,
   created_at: '2026-04-26T00:00:00.000Z',
   updated_at: '2026-04-26T00:00:00.000Z',
 }

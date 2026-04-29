@@ -65,13 +65,15 @@ export const workshopPatchSchema = z
       .enum(['context', 'gather', 'cluster', 'vote', 'design', 'generate', 'report', 'completed'])
       .optional(),
     settings: workshopSettingsSchema.optional(),
+    design_step: z.number().int().min(1).max(4).optional(),
   })
   .refine(
     (value) =>
       value.title !== undefined ||
       value.description !== undefined ||
       value.current_stage !== undefined ||
-      value.settings !== undefined,
+      value.settings !== undefined ||
+      value.design_step !== undefined,
     '수정할 워크샵 필드가 필요합니다.',
   )
 
@@ -109,8 +111,21 @@ export const processStepCreateSchema = z.object({
   volume_info: z.string().trim().max(500).optional().nullable(),
 })
 
-export const processStepPatchSchema = processStepCreateSchema
-  .partial()
+export const processStepPatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100).optional(),
+    description: z.string().trim().max(500).optional().nullable(),
+    node_type: processNodeTypeSchema.optional(),
+    order_index: z.number().int().optional(),
+    position_x: z.number().optional().nullable(),
+    position_y: z.number().optional().nullable(),
+    width: z.number().positive().optional().nullable(),
+    height: z.number().positive().optional().nullable(),
+    lane_id: z.string().uuid().optional().nullable(),
+    duration_info: z.string().trim().max(500).optional().nullable(),
+    tools_systems: z.string().trim().max(500).optional().nullable(),
+    volume_info: z.string().trim().max(500).optional().nullable(),
+  })
   .refine((value) => Object.keys(value).length > 0, '수정할 프로세스 노드 필드가 필요합니다.')
 
 export const processEdgeCreateSchema = z
@@ -185,11 +200,20 @@ export const patchClusterSchema = z
   .object({
     name: z.string().trim().min(1).max(50).optional(),
     order_index: z.number().int().optional(),
+    score_impact: z.number().int().min(1).max(5).nullable().optional(),
+    score_feasibility: z.number().int().min(1).max(5).nullable().optional(),
+    score_urgency: z.number().int().min(1).max(5).nullable().optional(),
   })
   .refine(
-    (value) => value.name !== undefined || value.order_index !== undefined,
+    (value) => value.name !== undefined || value.order_index !== undefined || value.score_impact !== undefined || value.score_feasibility !== undefined || value.score_urgency !== undefined,
     '수정할 클러스터 필드가 필요합니다.',
   )
+
+export const upsertClusterScoreSchema = z.object({
+  score_impact: z.number().int().min(1).max(5),
+  score_feasibility: z.number().int().min(1).max(5),
+  score_urgency: z.number().int().min(1).max(5),
+})
 
 export const listVotesQuerySchema = z.object({
   workshop_id: z.string().uuid(),
@@ -200,21 +224,36 @@ export const createVoteSchema = z
     workshop_id: z.string().uuid(),
     cluster_id: z.string().uuid().optional().nullable(),
     note_id: z.string().uuid().optional().nullable(),
+    task_id: z.string().uuid().optional().nullable(),
   })
-  .refine((value) => Boolean(value.cluster_id) !== Boolean(value.note_id), {
-    message: '투표 대상은 하나만 선택해야 합니다.',
-  })
+  .refine(
+    (value) => {
+      const targets = [value.cluster_id, value.note_id, value.task_id].filter(Boolean)
+      return targets.length === 1
+    },
+    { message: '투표 대상은 하나만 선택해야 합니다.' },
+  )
 
 export const deleteVoteQuerySchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().uuid().optional(),
   workshop_id: z.string().uuid(),
-})
+  task_id: z.string().uuid().optional(),
+}).refine(
+  (v) => Boolean(v.id) || Boolean(v.task_id),
+  '투표 id 또는 task_id가 필요합니다.',
+)
 
 export const voteResultsQuerySchema = z.object({
   workshop_id: z.string().uuid(),
 })
 
 export const aiDesignSchema = z.object({
+  workshop_id: z.string().uuid(),
+  design_step: z.number().int().min(1).max(4),
+  facilitator_note: z.string().trim().max(500).optional(),
+})
+
+export const aiOutputSchema = z.object({
   workshop_id: z.string().uuid(),
 })
 
@@ -224,7 +263,6 @@ export const designArtifactPatchSchema = z
     agent_specs: z.unknown().optional(),
     kpis: z.unknown().optional(),
     data_requirements: z.unknown().optional(),
-    org_requirements: z.unknown().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, '수정할 설계 산출물 필드가 필요합니다.')
 
@@ -240,10 +278,11 @@ export const patchTaskSchema = z
     sub_features: z.array(z.string().trim().min(1)).optional(),
     priority: z.enum(['high', 'medium', 'low']).optional().nullable(),
     difficulty: z.enum(['low', 'medium', 'high']).optional().nullable(),
+    is_selected: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, '수정할 과제 필드가 필요합니다.')
 
-export const reactionTypeSchema = z.enum(['👍', '⚠️'])
+export const reactionTypeSchema = z.enum(['👍', '🤔'])
 
 export const createReactionSchema = z
   .object({
@@ -269,4 +308,23 @@ export const listReactionsQuerySchema = z
 export const deleteReactionQuerySchema = z.object({
   id: z.string().uuid(),
   workshop_id: z.string().uuid(),
+})
+
+export const prdQuerySchema = z.object({
+  workshop_id: z.string().uuid(),
+})
+
+export const prdPatchSchema = z.object({
+  workshop_id: z.string().uuid(),
+  content: z.string().trim().min(1).max(50_000),
+})
+
+export const reportPatchSchema = z.object({
+  content: z.string().trim().min(1).max(80_000),
+})
+
+export const testDataSchema = z.object({
+  workshop_id: z.string().uuid(),
+  scenario: z.string().trim().min(1).max(500),
+  mode: z.enum(['process', 'notes', 'both']),
 })

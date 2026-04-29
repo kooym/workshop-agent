@@ -36,9 +36,11 @@ export async function GET(req: NextRequest) {
       const rows = reactions ?? []
       return success({
         thumbs_up: rows.filter((reaction) => reaction.reaction_type === '👍').length,
-        warning: rows.filter((reaction) => reaction.reaction_type === '⚠️').length,
+        thinking: rows.filter((reaction) => reaction.reaction_type === '🤔').length,
         my_reaction:
           rows.find((reaction) => reaction.participant_id === participant.id)?.reaction_type ?? null,
+        my_reaction_id:
+          rows.find((reaction) => reaction.participant_id === participant.id)?.id ?? null,
       })
     },
     { workshopId: parsed.data.workshop_id },
@@ -63,6 +65,27 @@ export async function POST(req: NextRequest) {
         return error(API_ERROR_CODES.NOT_FOUND, '반응 대상을 찾을 수 없습니다.', 404)
       }
 
+      // Check existing reaction for this participant on this target
+      const existingQuery = service
+        .from('task_reactions')
+        .select('*')
+        .eq('workshop_id', parsed.data.workshop_id)
+        .eq('participant_id', participant.id)
+
+      const { data: existing } = parsed.data.task_id
+        ? await existingQuery.eq('task_id', parsed.data.task_id).maybeSingle()
+        : await existingQuery.eq('prd_id', parsed.data.prd_id ?? '').maybeSingle()
+
+      if (existing) {
+        if (existing.reaction_type === parsed.data.reaction_type) {
+          // Same reaction → toggle off (delete)
+          await service.from('task_reactions').delete().eq('id', existing.id)
+          return success({ success: true, toggled_off: true })
+        }
+        // Different reaction → delete old, insert new
+        await service.from('task_reactions').delete().eq('id', existing.id)
+      }
+
       const { data: reaction, error: reactionError } = await service
         .from('task_reactions')
         .insert({
@@ -76,7 +99,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (reactionError) {
-        return error(API_ERROR_CODES.CONFLICT, '이미 같은 반응을 남겼습니다.', 409)
+        return error(API_ERROR_CODES.INTERNAL_ERROR, reactionError.message, 500)
       }
 
       return success(reaction, 201)

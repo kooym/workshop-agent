@@ -24,7 +24,8 @@ export async function clusterNotesWithAI(
       const prompt = buildClusteringPrompt(notes, existingClusters)
       const raw = await createCompletion({
         ...prompt,
-        maxTokens: 2000,
+        maxTokens: 8000,
+        timeoutMs: 300_000,
       })
       return parseClusteringResponse(raw, inputNoteIds)
     } catch (error) {

@@ -7,6 +7,9 @@ export interface Cluster extends Entity, Timestamped {
   summary: string | null
   order_index: number
   is_stale: boolean
+  score_impact: number | null
+  score_feasibility: number | null
+  score_urgency: number | null
 }
 
 export type ClusterWithNotes = Cluster & {

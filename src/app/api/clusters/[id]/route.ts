@@ -53,6 +53,15 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (parsed.data.order_index !== undefined) {
       patch.order_index = parsed.data.order_index
     }
+    if (parsed.data.score_impact !== undefined) {
+      patch.score_impact = parsed.data.score_impact
+    }
+    if (parsed.data.score_feasibility !== undefined) {
+      patch.score_feasibility = parsed.data.score_feasibility
+    }
+    if (parsed.data.score_urgency !== undefined) {
+      patch.score_urgency = parsed.data.score_urgency
+    }
 
     const { data: updated, error: updateError } = await service
       .from('clusters')

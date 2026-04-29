@@ -76,14 +76,17 @@ export const useWorkshopStore = create<WorkshopStore>()(
         const participants = payload.data.participants as Participant[]
         const currentParticipant = get().currentParticipant
 
+        const updatedParticipant = currentParticipant
+          ? participants.find((participant) => participant.id === currentParticipant.id) ??
+            currentParticipant
+          : null
+
         set({
           workshop,
           participants,
           viewingStage: get().viewingStage ?? workshop.current_stage,
-          currentParticipant: currentParticipant
-            ? participants.find((participant) => participant.id === currentParticipant.id) ??
-              currentParticipant
-            : null,
+          currentParticipant: updatedParticipant,
+          isFacilitator: updatedParticipant?.is_facilitator ?? false,
         })
       },
     }),

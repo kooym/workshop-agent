@@ -24,8 +24,25 @@
 - 제약: Supabase live Realtime/unique constraint E2E는 Docker Desktop/daemon 부재로 미검증.
 - 운영 메모: 기존 3000번 dev server가 포트를 점유했지만 `/api/health` 응답이 없었다. 검증용 서버는 3001번에서 정상 응답했다.
 
-### In Progress: Step 7 ax-design
+## 2026-04-27
 
-- 시작: AX 설계 단계 구현을 시작했다.
-- 범위: design prompt/schema/API, design_artifacts/tasks/reactions API, Design 화면, design/task/reaction Realtime 연결.
-- 현재 결정: `ax_tasks` 테이블에는 task별 다중 cluster_ids 컬럼이 없으므로 MVP DB 반영은 `cluster_id` 단일 대표 클러스터와 `pain_points` JSON에 전체 cluster_ids를 보존하는 방식으로 구현한다.
+### Completed: Step 7 ax-design
+
+- 구현: AX 설계 prompt/schema/API, design_artifacts/tasks/reactions API, DesignView 6개 탭, Mermaid + React Flow TO-BE 뷰, 퍼실리테이터 그래프 위치/라벨 편집 저장, task/reaction UI, design/task/reaction Realtime 연결.
+- 검증: `npm run lint`, `npm run typecheck`, `npm run test` (`17 files / 59 tests`), `npm run build` 통과.
+- 테스트 보강: `/api/ai/design` route의 design-stage lock, active/stale processing lock, 성공 후 processing 해제, AI 실패 시 processing 복구를 추가 검증했다.
+- 현재 결정: `ax_tasks` 테이블에는 task별 다중 cluster_ids 컬럼이 없으므로 MVP DB 반영은 `cluster_id` 단일 대표 클러스터와 `pain_points` JSON에 전체 cluster_ids를 보존한다.
+- 제약: Live Azure OpenAI 호출, Supabase DB/Realtime E2E, Docker build는 네트워크 제한과 Docker Desktop/daemon 부재로 미검증. 현재 Node는 v25.6.0이고 프로젝트 표준은 Node 20 LTS다.
+
+### Completed: Step 8 output-generation
+
+- 구현: PRD/종합 보고서 prompt, Markdown content schema, `/api/ai/generate`, `/api/ai/report`, 최신 PRD/보고서 조회·버전 증가 저장 API, react-markdown 기반 Preview/Editor, MermaidDiagram lazy renderer, Markdown 복사, PRD reaction bar.
+- 검증: output helper 테스트를 추가했고 전체 `npm run lint`, `npm run typecheck`, `npm run test` (`19 files / 66 tests`), `npm run build` 통과.
+- 제약: Live Azure OpenAI 출력 생성과 Supabase DB/Realtime E2E는 미검증.
+
+### Completed: Step 9 stage-flow
+
+- 구현: 단계 전환 사전조건 검증, 워크샵 summary API, StageNav 아이콘/자유 네비게이션/ConfirmModal/stale 배지/409 처리, InviteCode, Timer, StageGuideBanner, StaleBanner, completed JourneySummary/내 기여 요약/산출물 이동·복사.
+- 검증: stage prerequisite 테스트와 secret audit(`rg "SUPABASE_SERVICE_ROLE_KEY|AZURE_OPENAI_API_KEY|SESSION_SECRET" src/app src/components`) 통과. `/api/health`는 dev server `http://localhost:3001`에서 200 응답 확인.
+- 릴리즈 게이트: `next.config.ts` standalone, Dockerfile standalone/static/public 복사, `.dockerignore` env/node_modules/.next/coverage 제외, port 3000 설정을 확인했다.
+- 제약: `docker build -t workshop-agent .`는 Docker 권한 승인 후 buildx까지 진입했지만 `node:20-alpine` metadata resolution 단계에서 장시간 멈춰 취소했다. Docker image smoke test는 미검증. 현재 Node는 v25.6.0이고 프로젝트 표준은 Node 20 LTS다.

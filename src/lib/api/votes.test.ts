@@ -33,11 +33,13 @@ describe('vote policy helpers', () => {
     expect(resolveVoteTarget('cluster', { cluster_id: 'cluster-id' })).toEqual({
       cluster_id: 'cluster-id',
       note_id: null,
+      task_id: null,
     })
     expect(resolveVoteTarget('cluster', { note_id: 'note-id' })).toBeNull()
     expect(resolveVoteTarget('note', { note_id: 'note-id' })).toEqual({
       cluster_id: null,
       note_id: 'note-id',
+      task_id: null,
     })
   })
 })
@@ -47,13 +49,13 @@ describe('vote result aggregation', () => {
     const results = aggregateVoteResults({
       voteMode: 'cluster',
       votes: [
-        { id: 'v1', workshop_id: workshop.id, participant_id: 'p1', cluster_id: 'c1', note_id: null, created_at: '' },
-        { id: 'v2', workshop_id: workshop.id, participant_id: 'p2', cluster_id: 'c1', note_id: null, created_at: '' },
-        { id: 'v3', workshop_id: workshop.id, participant_id: 'p3', cluster_id: 'c2', note_id: null, created_at: '' },
+        { id: 'v1', workshop_id: workshop.id, participant_id: 'p1', cluster_id: 'c1', note_id: null, task_id: null, created_at: '' },
+        { id: 'v2', workshop_id: workshop.id, participant_id: 'p2', cluster_id: 'c1', note_id: null, task_id: null, created_at: '' },
+        { id: 'v3', workshop_id: workshop.id, participant_id: 'p3', cluster_id: 'c2', note_id: null, task_id: null, created_at: '' },
       ],
       clusters: [
-        { id: 'c1', workshop_id: workshop.id, name: 'A', summary: null, order_index: 0, is_stale: false, created_at: '', updated_at: '' },
-        { id: 'c2', workshop_id: workshop.id, name: 'B', summary: null, order_index: 1, is_stale: false, created_at: '', updated_at: '' },
+        { id: 'c1', workshop_id: workshop.id, name: 'A', summary: null, order_index: 0, is_stale: false, score_impact: null, score_feasibility: null, score_urgency: null, created_at: '', updated_at: '' },
+        { id: 'c2', workshop_id: workshop.id, name: 'B', summary: null, order_index: 1, is_stale: false, score_impact: null, score_feasibility: null, score_urgency: null, created_at: '', updated_at: '' },
       ],
       notes: [],
     })

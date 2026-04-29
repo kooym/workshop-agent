@@ -94,9 +94,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (parsed.data.data_requirements !== undefined) {
       patch.data_requirements = parsed.data.data_requirements as Json
     }
-    if (parsed.data.org_requirements !== undefined) {
-      patch.org_requirements = parsed.data.org_requirements as Json
-    }
 
     const { data: updated, error: updateError } = await service
       .from('design_artifacts')

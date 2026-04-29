@@ -25,5 +25,12 @@ export async function POST(req: NextRequest) {
     return error(API_ERROR_CODES.UNAUTHORIZED, authError.message, authError.status ?? 401)
   }
 
+  // Check if user is approved
+  const metadata = data.user?.user_metadata
+  if (metadata?.approved !== true) {
+    await supabase.auth.signOut()
+    return error(API_ERROR_CODES.FORBIDDEN, '관리자 승인 대기 중입니다. 승인 후 로그인할 수 있습니다.', 403)
+  }
+
   return success({ user: data.user, session: data.session })
 }

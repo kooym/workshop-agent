@@ -22,9 +22,25 @@ export function createRateLimiter(options: {
   const maxFailures = options.maxFailures ?? 5
   const blockDurationMs = options.blockDurationMs ?? 60_000
   const buckets = new Map<string, Bucket>()
+  let lastCleanup = Date.now()
+  const CLEANUP_INTERVAL_MS = 5 * 60_000
 
   return (ip: string, failed?: boolean): RateLimitResult => {
     const now = Date.now()
+
+    // Periodic cleanup to prevent memory leak
+    if (now - lastCleanup > CLEANUP_INTERVAL_MS) {
+      lastCleanup = now
+      for (const [key, bucket] of buckets) {
+        const allHitsExpired = bucket.hits.every((hit) => now - hit >= windowMs)
+        const blockExpired = bucket.blockedUntil <= now
+        const noFailures = bucket.failures === 0
+        if (allHitsExpired && blockExpired && noFailures) {
+          buckets.delete(key)
+        }
+      }
+    }
+
     const bucket = buckets.get(ip) ?? { hits: [], failures: 0, blockedUntil: 0 }
 
     if (bucket.blockedUntil > now) {

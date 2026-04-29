@@ -39,6 +39,7 @@ export type Database = {
           settings: WorkshopSettings
           is_processing: boolean
           is_processing_since: string | null
+          design_step: number
           created_at: string
           updated_at: string
         }
@@ -52,6 +53,7 @@ export type Database = {
           settings?: WorkshopSettings
           is_processing?: boolean
           is_processing_since?: string | null
+          design_step?: number
           created_at?: string
           updated_at?: string
         }
@@ -181,6 +183,9 @@ export type Database = {
           summary: string | null
           order_index: number
           is_stale: boolean
+          score_impact: number | null
+          score_feasibility: number | null
+          score_urgency: number | null
           created_at: string
           updated_at: string
         }
@@ -190,6 +195,9 @@ export type Database = {
           summary?: string | null
           order_index?: number
           is_stale?: boolean
+          score_impact?: number | null
+          score_feasibility?: number | null
+          score_urgency?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -230,6 +238,7 @@ export type Database = {
           participant_id: string
           cluster_id: string | null
           note_id: string | null
+          task_id: string | null
           created_at: string
         }
         Insert: InsertWithId & {
@@ -237,6 +246,7 @@ export type Database = {
           participant_id: string
           cluster_id?: string | null
           note_id?: string | null
+          task_id?: string | null
           created_at?: string
         }
         Update: Partial<Database['public']['Tables']['votes']['Insert']>
@@ -249,7 +259,10 @@ export type Database = {
           agent_specs: Json
           kpis: Json
           data_requirements: Json
-          org_requirements: Json
+          final_task_detail: Json | null
+          solution_canvas: Json | null
+          alternative_index: number
+          alternative_name: string
           version: number
           is_stale: boolean
           created_at: string
@@ -261,7 +274,10 @@ export type Database = {
           agent_specs: Json
           kpis: Json
           data_requirements: Json
-          org_requirements: Json
+          final_task_detail?: Json | null
+          solution_canvas?: Json | null
+          alternative_index?: number
+          alternative_name?: string
           version?: number
           is_stale?: boolean
           created_at?: string
@@ -280,9 +296,14 @@ export type Database = {
           difficulty: string | null
           priority: 'high' | 'medium' | 'low' | null
           expected_effect: string | null
+          kpi_name: string | null
+          estimated_value: string | null
           pain_points: Json
           core_features: Json
           sub_features: Json
+          is_selected: boolean
+          is_bundle: boolean
+          bundle_id: string | null
           order_index: number
           created_at: string
           updated_at: string
@@ -296,9 +317,14 @@ export type Database = {
           difficulty?: string | null
           priority?: 'high' | 'medium' | 'low' | null
           expected_effect?: string | null
+          kpi_name?: string | null
+          estimated_value?: string | null
           pain_points?: Json
           core_features?: Json
           sub_features?: Json
+          is_selected?: boolean
+          is_bundle?: boolean
+          bundle_id?: string | null
           order_index?: number
           created_at?: string
           updated_at?: string
@@ -380,6 +406,30 @@ export type Database = {
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['yjs_documents']['Insert']>
+        Relationships: []
+      }
+      cluster_scores: {
+        Row: RowWithId & {
+          cluster_id: string
+          workshop_id: string
+          participant_id: string
+          score_impact: number
+          score_feasibility: number
+          score_urgency: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: InsertWithId & {
+          cluster_id: string
+          workshop_id: string
+          participant_id: string
+          score_impact: number
+          score_feasibility: number
+          score_urgency: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['cluster_scores']['Insert']>
         Relationships: []
       }
     }

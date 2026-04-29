@@ -75,6 +75,7 @@ export function StickyNoteShape({
       return
     }
 
+    event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
     setDrag({
       pointerId: event.pointerId,
@@ -90,9 +91,13 @@ export function StickyNoteShape({
       return
     }
 
+    // Parent div has CSS scale(zoom), so divide delta by zoom
+    const container = event.currentTarget.closest('[style*="scale"]')
+    const zoom = container ? parseFloat(container.getAttribute('style')?.match(/scale\(([\d.]+)\)/)?.[1] ?? '1') : 1
+
     setPosition({
-      x: Math.max(12, drag.startX + event.clientX - drag.startClientX),
-      y: Math.max(12, drag.startY + event.clientY - drag.startClientY),
+      x: Math.max(12, drag.startX + (event.clientX - drag.startClientX) / zoom),
+      y: Math.max(12, drag.startY + (event.clientY - drag.startClientY) / zoom),
     })
   }
 
@@ -101,9 +106,12 @@ export function StickyNoteShape({
       return
     }
 
+    const container = event.currentTarget.closest('[style*="scale"]')
+    const zoom = container ? parseFloat(container.getAttribute('style')?.match(/scale\(([\d.]+)\)/)?.[1] ?? '1') : 1
+
     const nextPosition = {
-      x: Math.max(12, drag.startX + event.clientX - drag.startClientX),
-      y: Math.max(12, drag.startY + event.clientY - drag.startClientY),
+      x: Math.max(12, drag.startX + (event.clientX - drag.startClientX) / zoom),
+      y: Math.max(12, drag.startY + (event.clientY - drag.startClientY) / zoom),
     }
 
     event.currentTarget.releasePointerCapture(event.pointerId)

@@ -1,6 +1,6 @@
 import type { Entity } from './common'
 
-export type ReactionType = '👍' | '⚠️'
+export type ReactionType = '👍' | '🤔'
 
 export interface TaskReaction extends Entity {
   workshop_id: string

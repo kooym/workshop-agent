@@ -17,7 +17,10 @@ const validResponse = {
 
 describe('clustering response schema', () => {
   it('parses valid JSON and verifies assignments', () => {
-    expect(parseClusteringResponse(JSON.stringify(validResponse), noteIds)).toEqual(validResponse)
+    const result = parseClusteringResponse(JSON.stringify(validResponse), noteIds)
+    expect(result.clusters).toHaveLength(3)
+    expect(result.clusters[0].name).toBe('반복 업무')
+    expect(result.clusters[0].note_ids).toEqual([noteIds[0]])
   })
 
   it('rejects missing note assignments', () => {

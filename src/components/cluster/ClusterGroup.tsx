@@ -3,6 +3,7 @@
 import { Check, Pencil, Save, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { ClusterScoring } from './ClusterScoring'
 import type { ClusterWithNotes } from '@/types/cluster'
 import type { Note } from '@/types/note'
 
@@ -16,10 +17,12 @@ const NOTE_STYLE = {
 export function ClusterGroup({
   cluster,
   canEdit,
+  canScore,
   onUpdated,
 }: {
   cluster: ClusterWithNotes
   canEdit: boolean
+  canScore?: boolean
   onUpdated(): void
 }) {
   const [isEditing, setIsEditing] = useState(false)
@@ -53,28 +56,28 @@ export function ClusterGroup({
   }
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-900/80">
-      <div className="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+    <section className="rounded-apple-lg border border-hairline bg-white">
+      <div className="flex items-start justify-between gap-3 border-b border-hairline px-4 py-3">
         <div className="min-w-0 flex-1">
           {isEditing ? (
             <input
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
               maxLength={50}
-              className="h-9 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 text-sm font-semibold text-white outline-none focus:border-sky-500"
+              className="h-9 w-full rounded-md border border-hairline bg-canvas-parchment px-3 text-sm font-semibold text-ink outline-none focus:border-primary-focus"
             />
           ) : (
             <div className="flex items-center gap-2">
-              <h3 className="truncate text-base font-semibold text-white">{cluster.name}</h3>
+              <h3 className="truncate text-base font-semibold text-ink">{cluster.name}</h3>
               {cluster.is_stale ? (
-                <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-200">
+                <span className="rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-600">
                   stale
                 </span>
               ) : null}
             </div>
           )}
           {cluster.summary ? (
-            <p className="mt-1 text-sm leading-5 text-neutral-400">{cluster.summary}</p>
+            <p className="mt-1 text-sm leading-5 text-ink-muted-48">{cluster.summary}</p>
           ) : null}
         </div>
         {canEdit ? (
@@ -87,7 +90,7 @@ export function ClusterGroup({
                   aria-label="저장"
                   onClick={saveName}
                   disabled={isSaving}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-700 text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-hairline text-ink hover:bg-canvas-parchment disabled:opacity-50"
                 >
                   {isSaving ? (
                     <Check aria-hidden className="h-4 w-4" />
@@ -103,7 +106,7 @@ export function ClusterGroup({
                     setDraftName(cluster.name)
                     setIsEditing(false)
                   }}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-700 text-neutral-200 hover:bg-neutral-800"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-hairline text-ink hover:bg-canvas-parchment"
                 >
                   <X aria-hidden className="h-4 w-4" />
                 </button>
@@ -114,7 +117,7 @@ export function ClusterGroup({
                 title="클러스터 이름 편집"
                 aria-label="클러스터 이름 편집"
                 onClick={() => setIsEditing(true)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-700 text-neutral-200 hover:bg-neutral-800"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-hairline text-ink hover:bg-canvas-parchment"
               >
                 <Pencil aria-hidden className="h-4 w-4" />
               </button>
@@ -129,12 +132,13 @@ export function ClusterGroup({
           </article>
         ))}
         {cluster.notes.length === 0 ? (
-          <p className="col-span-full rounded-md border border-dashed border-neutral-800 p-4 text-sm text-neutral-500">
+          <p className="col-span-full rounded-md border border-dashed border-hairline p-4 text-sm text-ink-muted-48">
             아직 연결된 포스트잇이 없습니다.
           </p>
         ) : null}
       </div>
-      <div className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-500">
+      <ClusterScoring cluster={cluster} canEdit={canScore ?? canEdit} onUpdated={onUpdated} />
+      <div className="border-t border-hairline px-4 py-2 text-xs text-ink-muted-48">
         포스트잇 {cluster.notes.length}개
       </div>
     </section>

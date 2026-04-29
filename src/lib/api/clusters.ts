@@ -96,11 +96,14 @@ export async function applyClusteringResponse({
     const rows = response.clusters.map((cluster, index) => {
       const id = crypto.randomUUID()
       clusterIdsByIndex.set(index, id)
+      const summary = cluster.rationale
+        ? `${cluster.summary} | ${cluster.rationale}`
+        : cluster.summary
       return {
         id,
         workshop_id: workshopId,
         name: cluster.name,
-        summary: cluster.summary,
+        summary,
         order_index: index,
         is_stale: false,
       }
@@ -129,13 +132,19 @@ export async function applyClusteringResponse({
 
       const id = crypto.randomUUID()
       clusterIdsByIndex.set(index, id)
+      const summary = cluster.rationale
+        ? `${cluster.summary} | ${cluster.rationale}`
+        : cluster.summary
       newRows.push({
         id,
         workshop_id: workshopId,
         name: cluster.name,
-        summary: cluster.summary,
+        summary,
         order_index: maxOrderIndex + newRows.length + 1,
         is_stale: false,
+        score_impact: null,
+        score_feasibility: null,
+        score_urgency: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

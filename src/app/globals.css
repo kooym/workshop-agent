@@ -6,7 +6,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * {
@@ -16,11 +16,171 @@
 body {
   min-height: 100vh;
   margin: 0;
-  background: #0a0a0a;
-  color: #ffffff;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family: 'SF Pro Text', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* Apple button active micro-interaction */
+.btn-active:active {
+  transform: scale(0.95);
+}
+
+/* Light-mode prose (Markdown preview) */
+.prose-apple {
+  color: #1d1d1f;
+  line-height: 1.47;
+  font-size: 17px;
+  letter-spacing: -0.374px;
+}
+
+.prose-apple h1,
+.prose-apple h2,
+.prose-apple h3 {
+  color: #1d1d1f;
+  font-family: 'SF Pro Display', system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+}
+
+.prose-apple h1 { font-size: 40px; line-height: 1.1; }
+.prose-apple h2 { font-size: 28px; line-height: 1.14; letter-spacing: 0.196px; }
+.prose-apple h3 { font-size: 21px; line-height: 1.19; letter-spacing: 0.231px; }
+
+.prose-apple a { color: #0066cc; }
+.prose-apple strong { font-weight: 600; }
+.prose-apple blockquote {
+  border-left: 3px solid #e0e0e0;
+  background: #f5f5f7;
+  color: #333333;
+  padding: 12px 16px;
+  border-radius: 8px;
+}
+
+.prose-apple table { border-collapse: collapse; width: 100%; }
+.prose-apple th,
+.prose-apple td {
+  border: 1px solid #e0e0e0;
+  padding: 8px 12px;
+  text-align: left;
+}
+.prose-apple thead { background: #f5f5f7; }
+.prose-apple th { font-weight: 600; }
+
+.prose-apple pre {
+  background: #f5f5f7;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.prose-apple code {
+  font-size: 14px;
+  color: #333333;
+}
+
+.prose-apple hr {
+  border-color: #e0e0e0;
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  /* Hide everything except .print-content */
+  body > * {
+    display: none !important;
+  }
+
+  .print-content,
+  .print-content * {
+    display: revert !important;
+    visibility: visible !important;
+  }
+
+  .print-content {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .print-content .prose {
+    color: black !important;
+    max-width: none !important;
+  }
+
+  .print-content .prose h1,
+  .print-content .prose h2,
+  .print-content .prose h3,
+  .print-content .prose h4 {
+    color: black !important;
+    break-after: avoid;
+  }
+
+  .print-content .prose table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .print-content .prose th,
+  .print-content .prose td {
+    border: 1px solid #d1d5db !important;
+    padding: 6px 10px !important;
+    color: black !important;
+    background: white !important;
+  }
+
+  .print-content .prose thead {
+    background: #f3f4f6 !important;
+  }
+
+  .print-content .prose th {
+    background: #f3f4f6 !important;
+    font-weight: 600;
+  }
+
+  .print-content .prose blockquote {
+    border-left: 3px solid #6b7280 !important;
+    background: #f9fafb !important;
+    color: #374151 !important;
+    padding: 8px 12px !important;
+  }
+
+  .print-content .prose strong {
+    color: black !important;
+  }
+
+  .print-content .prose a {
+    color: #1d4ed8 !important;
+    text-decoration: underline !important;
+  }
+
+  .print-content .prose pre {
+    border: 1px solid #d1d5db !important;
+    background: #f9fafb !important;
+    color: black !important;
+  }
+
+  .print-content .prose code {
+    color: #1e293b !important;
+  }
+
+  .print-content .prose hr {
+    border-color: #d1d5db !important;
+  }
 }

@@ -44,13 +44,13 @@ export function BoardToolbar({
   onAddNote(): void
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 bg-neutral-950 px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline bg-white px-4 py-3">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2 text-sm text-neutral-300">
+        <div className="flex items-center gap-2 text-sm text-ink-muted-80">
           <StickyNote aria-hidden className="h-4 w-4" />
           <span>{noteCount}/200</span>
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-neutral-800 bg-neutral-900 p-1">
+        <div className="flex items-center gap-1 rounded-md border border-hairline bg-surface-pearl p-1">
           {(Object.keys(COLOR_SWATCHES) as NoteColor[]).map((color) => (
             <button
               key={color}
@@ -60,7 +60,7 @@ export function BoardToolbar({
               aria-pressed={selectedColor === color}
               onClick={() => onColorChange(color)}
               disabled={readOnly}
-              className="h-7 w-7 rounded border border-neutral-700 outline-none ring-offset-2 ring-offset-neutral-950 transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-7 w-7 rounded border border-hairline outline-none ring-offset-2 ring-offset-white transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
               style={{
                 backgroundColor: COLOR_SWATCHES[color],
                 boxShadow: selectedColor === color ? '0 0 0 2px #38bdf8' : undefined,
@@ -68,13 +68,13 @@ export function BoardToolbar({
             />
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-neutral-300">
+        <label className="flex items-center gap-2 text-sm text-ink-muted-80">
           <Tags aria-hidden className="h-4 w-4" />
           <select
             value={selectedProcessStepId}
             onChange={(event) => onProcessStepChange(event.target.value)}
             disabled={readOnly || processOptions.length === 0}
-            className="h-9 min-w-48 rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm text-white outline-none focus:border-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-9 min-w-48 rounded-md border border-hairline bg-surface-pearl px-3 text-sm text-ink outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">프로세스 태그 없음</option>
             {processOptions.map((option) => (
@@ -90,7 +90,7 @@ export function BoardToolbar({
         title="포스트잇 추가"
         onClick={onAddNote}
         disabled={readOnly || isCreating || noteCount >= 200}
-        className="inline-flex h-9 items-center gap-2 rounded-md bg-sky-600 px-3 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500"
+        className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white transition hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-canvas-parchment disabled:text-ink-muted-48"
       >
         <Plus aria-hidden className="h-4 w-4" />
         포스트잇 추가

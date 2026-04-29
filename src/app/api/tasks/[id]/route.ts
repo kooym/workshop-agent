@@ -48,6 +48,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (parsed.data.difficulty !== undefined) {
       patch.difficulty = parsed.data.difficulty
     }
+    if (parsed.data.is_selected !== undefined) {
+      patch.is_selected = parsed.data.is_selected
+    }
 
     const { data: updated, error: updateError } = await service
       .from('ax_tasks')

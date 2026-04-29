@@ -72,66 +72,82 @@ const validResponse: DesignResponse = {
       responsible_team: '운영팀',
     },
   ],
-  org_requirements: [
-    {
-      category: 'training',
-      description: 'Agent 결과 검토 교육',
-      priority: 'medium',
-    },
-  ],
+}
+
+const validSingleAlternative = {
+  name: 'A안: 점진적 자동화',
+  strategy: '단순 업무 자동화',
+  ...validResponse,
+}
+
+// Phase 1 result (core design)
+const phase1Result = {
+  name: validSingleAlternative.name,
+  strategy: validSingleAlternative.strategy,
+  tobe_process: validSingleAlternative.tobe_process,
+  agent_specs: validSingleAlternative.agent_specs,
+}
+
+// Phase 2 result (implementation plan)
+const phase2Result = {
+  tasks: validSingleAlternative.tasks,
+  kpis: validSingleAlternative.kpis,
+  data_requirements: validSingleAlternative.data_requirements,
 }
 
 describe('design response validation', () => {
-  it('accepts valid mappings', () => {
-    expect(() =>
-      validateDesignResponse(validResponse, {
-        clusterIds: [clusterId],
-        processStepIds: [processStepId],
-      }),
-    ).not.toThrow()
+  it('accepts valid mappings and returns empty warnings', () => {
+    const warnings = validateDesignResponse(validResponse, {
+      clusterIds: [clusterId],
+      processStepIds: [processStepId],
+    })
+    expect(warnings).toEqual([])
   })
 
-  it('rejects unknown cluster mappings', () => {
-    expect(() =>
-      validateDesignResponse(
-        {
-          ...validResponse,
-          tasks: [{ ...validResponse.tasks[0], cluster_ids: ['00000000-0000-4000-a000-999999999999'] }],
-        },
-        { clusterIds: [clusterId], processStepIds: [processStepId] },
-      ),
-    ).toThrow('Unknown cluster_id')
+  it('soft-filters unknown cluster IDs and returns warnings', () => {
+    const modified = {
+      ...validResponse,
+      tasks: [{ ...validResponse.tasks[0], cluster_ids: ['00000000-0000-4000-a000-999999999999'] }],
+    }
+    const warnings = validateDesignResponse(modified, {
+      clusterIds: [clusterId],
+      processStepIds: [processStepId],
+    })
+    expect(warnings.length).toBeGreaterThan(0)
+    expect(modified.tasks[0].cluster_ids).toEqual([])
   })
 
-  it('rejects unknown AS-IS mappings', () => {
-    expect(() =>
-      validateDesignResponse(
-        {
-          ...validResponse,
-          tobe_process: {
-            ...validResponse.tobe_process,
-            steps: [
-              {
-                ...validResponse.tobe_process.steps[0],
-                asis_step_ids: ['unknown-step'],
-              },
-            ],
+  it('soft-filters unknown AS-IS step IDs and returns warnings', () => {
+    const modified = {
+      ...validResponse,
+      tobe_process: {
+        ...validResponse.tobe_process,
+        steps: [
+          {
+            ...validResponse.tobe_process.steps[0],
+            asis_step_ids: ['unknown-step'],
           },
-        },
-        { clusterIds: [clusterId], processStepIds: [processStepId] },
-      ),
-    ).toThrow('Unknown asis_step_id')
+        ],
+      },
+    }
+    const warnings = validateDesignResponse(modified, {
+      clusterIds: [clusterId],
+      processStepIds: [processStepId],
+    })
+    expect(warnings.length).toBeGreaterThan(0)
+    expect(modified.tobe_process.steps[0].asis_step_ids).toEqual([])
   })
 })
 
 describe('generateDesignWithAI', () => {
-  it('retries malformed responses and returns a valid design', async () => {
+  it('runs 2 phases and merges results', async () => {
     const createCompletion = vi
       .fn()
-      .mockResolvedValueOnce('not-json')
-      .mockResolvedValueOnce(JSON.stringify(validResponse))
+      .mockResolvedValueOnce(JSON.stringify(phase1Result))
+      .mockResolvedValueOnce(JSON.stringify(phase2Result))
 
-    const response = await generateDesignWithAI(
+    const result = await generateDesignWithAI(
+      0,
       {
         process_graph: {
           nodes: [{ id: processStepId, name: '접수', description: null, node_type: 'task' }],
@@ -146,6 +162,36 @@ describe('generateDesignWithAI', () => {
     )
 
     expect(createCompletion).toHaveBeenCalledTimes(2)
-    expect(response.tasks[0]?.title).toBe('요청 자동 분류')
+    expect(result.alternative.name).toBe('A안: 점진적 자동화')
+    expect(result.alternative.tasks[0]?.title).toBe('요청 자동 분류')
+    expect(result.alternative.tobe_process.steps).toHaveLength(1)
+    expect(result.alternative.agent_specs).toHaveLength(1)
+  })
+
+  it('retries phase 1 on failure then proceeds to phase 2', async () => {
+    const createCompletion = vi
+      .fn()
+      .mockResolvedValueOnce('not-json')
+      .mockResolvedValueOnce(JSON.stringify(phase1Result))
+      .mockResolvedValueOnce(JSON.stringify(phase2Result))
+
+    const result = await generateDesignWithAI(
+      0,
+      {
+        process_graph: {
+          nodes: [{ id: processStepId, name: '접수', description: null, node_type: 'task' }],
+          edges: [],
+          lanes: [],
+        },
+        clusters: [{ id: clusterId, name: '접수 병목', summary: null, vote_count: 3, notes: [] }],
+        vote_mode: 'cluster',
+      },
+      { clusterIds: [clusterId], processStepIds: [processStepId] },
+      { createCompletion, wait: vi.fn().mockResolvedValue(undefined) },
+    )
+
+    expect(createCompletion).toHaveBeenCalledTimes(3)
+    expect(result.alternative.name).toBe('A안: 점진적 자동화')
+    expect(result.alternative.tasks[0]?.title).toBe('요청 자동 분류')
   })
 })

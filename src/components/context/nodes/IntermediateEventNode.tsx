@@ -1,8 +1,9 @@
 'use client'
 
 import type { NodeProps } from '@xyflow/react'
+import { memo } from 'react'
 import { BaseBpmnNode } from './BaseBpmnNode'
 
-export function IntermediateEventNode(props: NodeProps) {
+export const IntermediateEventNode = memo(function IntermediateEventNode(props: NodeProps) {
   return <BaseBpmnNode {...props} variant="event" />
-}
+})

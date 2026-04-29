@@ -1,0 +1,36 @@
+# ══════════════════════════════════════════════════════════════
+# 개발용 오버라이드 — 핫 리로드 지원
+#
+# app 서비스를 프로덕션 이미지 대신 소스 마운트 + npm run dev로 실행.
+# 소스 코드 수정 시 즉시 반영됩니다.
+#
+# 사용법:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+#   또는 이 파일이 있으면 `docker compose up` 시 자동 적용됩니다.
+# ══════════════════════════════════════════════════════════════
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM node:20-alpine
+        WORKDIR /app
+    working_dir: /app
+    command: ["sh", "-c", "npm install && npm run dev -- -H 0.0.0.0 -p 3000"]
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:${KONG_HTTP_PORT}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT}
+
+volumes:
+  node_modules:

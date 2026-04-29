@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server'
 import { withAuth, withFacilitator } from '@/lib/api/middleware'
 import { API_ERROR_CODES, error, success } from '@/lib/api/response'
+import { validateStagePrerequisites } from '@/lib/api/stage'
+import { buildWorkshopSummary } from '@/lib/api/summary'
 import { workshopPatchSchema } from '@/lib/api/validators'
 import type { TablesUpdate } from '@/lib/supabase/types'
 import {
@@ -84,6 +86,16 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       if (stageError) {
         return error(API_ERROR_CODES.CONFLICT, stageError, 409)
       }
+
+      const prerequisiteError = validateStagePrerequisites(
+        workshop.current_stage,
+        nextStage,
+        await buildWorkshopSummary(service, workshop),
+        workshop,
+      )
+      if (prerequisiteError) {
+        return error(API_ERROR_CODES.VALIDATION_ERROR, prerequisiteError, 400)
+      }
     }
 
     const { count: participantCount, error: countError } = await service
@@ -121,6 +133,41 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         workshop.settings as WorkshopSettings,
         parsed.data.settings,
       )
+    }
+    if (parsed.data.design_step !== undefined) {
+      patch.design_step = parsed.data.design_step
+    }
+
+    // When transitioning cluster→vote, compute average scores from cluster_scores
+    if (nextStage === 'vote' && workshop.current_stage === 'cluster') {
+      const { data: clusters } = await service
+        .from('clusters')
+        .select('id')
+        .eq('workshop_id', id)
+
+      if (clusters && clusters.length > 0) {
+        for (const cluster of clusters) {
+          const { data: scores } = await service
+            .from('cluster_scores')
+            .select('score_impact, score_feasibility, score_urgency')
+            .eq('cluster_id', cluster.id)
+
+          if (scores && scores.length > 0) {
+            const avgImpact = Math.round(scores.reduce((s, r) => s + r.score_impact, 0) / scores.length)
+            const avgFeasibility = Math.round(scores.reduce((s, r) => s + r.score_feasibility, 0) / scores.length)
+            const avgUrgency = Math.round(scores.reduce((s, r) => s + r.score_urgency, 0) / scores.length)
+
+            await service
+              .from('clusters')
+              .update({
+                score_impact: avgImpact,
+                score_feasibility: avgFeasibility,
+                score_urgency: avgUrgency,
+              })
+              .eq('id', cluster.id)
+          }
+        }
+      }
     }
 
     const query = service.from('workshops').update(patch).eq('id', id)

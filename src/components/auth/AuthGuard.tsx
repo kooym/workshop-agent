@@ -22,7 +22,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }, [router])
 
   if (!isReady) {
-    return <div className="p-6 text-sm text-neutral-400">세션을 확인하는 중입니다.</div>
+    return <div className="p-6 text-sm text-ink-muted-48">세션을 확인하는 중입니다.</div>
   }
 
   return children

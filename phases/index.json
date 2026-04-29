@@ -2,8 +2,8 @@
   "phases": [
     {
       "dir": "0-mvp",
-      "status": "pending",
-      "known_issues": "Step 0 Docker build and Supabase local db reset for Steps 1-2 were not verified because Docker Desktop/daemon is unavailable; continuing by user approval. Current Node is v24.14.1 while the project standard is Node 20 LTS."
+      "status": "completed",
+      "known_issues": "Live Azure OpenAI calls, Supabase DB/Realtime E2E, and Docker image smoke test remain unverified in this environment. Docker build reached Docker buildx but hung at node:20-alpine metadata resolution and was cancelled. Current Node is v25.6.0 while the project standard is Node 20 LTS."
     }
   ]
 }

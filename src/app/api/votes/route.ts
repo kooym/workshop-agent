@@ -80,33 +80,44 @@ export async function POST(req: NextRequest) {
         return error(API_ERROR_CODES.NOT_FOUND, '워크샵을 찾을 수 없습니다.', 404)
       }
       if (!canMutateVotes(workshop)) {
-        return error(API_ERROR_CODES.CONFLICT, '투표 단계에서만 투표할 수 있습니다.', 409)
+        return error(API_ERROR_CODES.CONFLICT, '투표할 수 없는 단계입니다.', 409)
       }
 
       const target = resolveVoteTarget(workshop.settings.vote_mode, parsed.data)
       if (!target) {
-        return error(API_ERROR_CODES.VALIDATION_ERROR, '워크샵 투표 방식에 맞는 대상을 선택해주세요.', 400)
+        return error(API_ERROR_CODES.VALIDATION_ERROR, '투표 대상을 확인해주세요.', 400)
       }
 
-      const targetExists = target.cluster_id
-        ? await existsInWorkshop(service, 'clusters', target.cluster_id, parsed.data.workshop_id)
-        : await existsInWorkshop(service, 'notes', target.note_id, parsed.data.workshop_id)
-
-      if (!targetExists) {
-        return error(API_ERROR_CODES.NOT_FOUND, '투표 대상을 찾을 수 없습니다.', 404)
+      // Validate target exists
+      if (target.task_id) {
+        const taskExists = await existsInWorkshop(service, 'ax_tasks', target.task_id, parsed.data.workshop_id)
+        if (!taskExists) {
+          return error(API_ERROR_CODES.NOT_FOUND, '투표 대상을 찾을 수 없습니다.', 404)
+        }
+      } else {
+        const targetExists = target.cluster_id
+          ? await existsInWorkshop(service, 'clusters', target.cluster_id, parsed.data.workshop_id)
+          : await existsInWorkshop(service, 'notes', target.note_id, parsed.data.workshop_id)
+        if (!targetExists) {
+          return error(API_ERROR_CODES.NOT_FOUND, '투표 대상을 찾을 수 없습니다.', 404)
+        }
       }
 
-      const { count, error: countError } = await service
-        .from('votes')
-        .select('id', { count: 'exact', head: true })
-        .eq('workshop_id', parsed.data.workshop_id)
-        .eq('participant_id', participant.id)
+      // Task votes have a separate budget — skip votes_per_person limit for task votes
+      if (!target.task_id) {
+        const { count, error: countError } = await service
+          .from('votes')
+          .select('id', { count: 'exact', head: true })
+          .eq('workshop_id', parsed.data.workshop_id)
+          .eq('participant_id', participant.id)
+          .is('task_id', null)
 
-      if (countError) {
-        return error(API_ERROR_CODES.INTERNAL_ERROR, countError.message, 500)
-      }
-      if ((count ?? 0) >= workshop.settings.votes_per_person) {
-        return error(API_ERROR_CODES.VOTE_LIMIT, '사용 가능한 투표 수를 모두 사용했습니다.', 409)
+        if (countError) {
+          return error(API_ERROR_CODES.INTERNAL_ERROR, countError.message, 500)
+        }
+        if ((count ?? 0) >= workshop.settings.votes_per_person) {
+          return error(API_ERROR_CODES.VOTE_LIMIT, '사용 가능한 투표 수를 모두 사용했습니다.', 409)
+        }
       }
 
       const duplicateQuery = service
@@ -115,9 +126,11 @@ export async function POST(req: NextRequest) {
         .eq('workshop_id', parsed.data.workshop_id)
         .eq('participant_id', participant.id)
 
-      const { data: duplicate } = target.cluster_id
-        ? await duplicateQuery.eq('cluster_id', target.cluster_id).maybeSingle()
-        : await duplicateQuery.eq('note_id', target.note_id ?? '').maybeSingle()
+      const { data: duplicate } = target.task_id
+        ? await duplicateQuery.eq('task_id', target.task_id).maybeSingle()
+        : target.cluster_id
+          ? await duplicateQuery.eq('cluster_id', target.cluster_id).maybeSingle()
+          : await duplicateQuery.eq('note_id', target.note_id ?? '').maybeSingle()
 
       if (duplicate) {
         return error(API_ERROR_CODES.CONFLICT, '이미 투표한 대상입니다.', 409)
@@ -130,6 +143,7 @@ export async function POST(req: NextRequest) {
           participant_id: participant.id,
           cluster_id: target.cluster_id,
           note_id: target.note_id,
+          task_id: target.task_id,
         })
         .select('*')
         .single()
@@ -147,11 +161,12 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const parsed = deleteVoteQuerySchema.safeParse({
-    id: req.nextUrl.searchParams.get('id'),
+    id: req.nextUrl.searchParams.get('id') ?? undefined,
     workshop_id: req.nextUrl.searchParams.get('workshop_id'),
+    task_id: req.nextUrl.searchParams.get('task_id') ?? undefined,
   })
   if (!parsed.success) {
-    return error(API_ERROR_CODES.VALIDATION_ERROR, '투표 id와 workshop_id가 필요합니다.', 400)
+    return error(API_ERROR_CODES.VALIDATION_ERROR, '투표 id 또는 task_id와 workshop_id가 필요합니다.', 400)
   }
 
   return withAuth(
@@ -167,13 +182,29 @@ export async function DELETE(req: NextRequest) {
         return error(API_ERROR_CODES.NOT_FOUND, '워크샵을 찾을 수 없습니다.', 404)
       }
       if (!canMutateVotes(workshop)) {
-        return error(API_ERROR_CODES.CONFLICT, '투표 단계에서만 투표를 취소할 수 있습니다.', 409)
+        return error(API_ERROR_CODES.CONFLICT, '투표를 취소할 수 없는 단계입니다.', 409)
       }
 
+      // Delete by task_id (for task voting in design stage)
+      if (parsed.data.task_id) {
+        const { error: deleteError } = await service
+          .from('votes')
+          .delete()
+          .eq('workshop_id', parsed.data.workshop_id)
+          .eq('participant_id', participant.id)
+          .eq('task_id', parsed.data.task_id)
+        if (deleteError) {
+          return error(API_ERROR_CODES.INTERNAL_ERROR, deleteError.message, 500)
+        }
+        await propagateVoteStaleIfNeeded(service, workshop)
+        return success({ success: true })
+      }
+
+      // Delete by vote id
       const { data: vote, error: voteError } = await service
         .from('votes')
         .select('*')
-        .eq('id', parsed.data.id)
+        .eq('id', parsed.data.id!)
         .eq('workshop_id', parsed.data.workshop_id)
         .maybeSingle()
 
@@ -187,7 +218,7 @@ export async function DELETE(req: NextRequest) {
         return error(API_ERROR_CODES.FORBIDDEN, '본인 투표만 취소할 수 있습니다.', 403)
       }
 
-      const { error: deleteError } = await service.from('votes').delete().eq('id', parsed.data.id)
+      const { error: deleteError } = await service.from('votes').delete().eq('id', parsed.data.id!)
       if (deleteError) {
         return error(API_ERROR_CODES.INTERNAL_ERROR, deleteError.message, 500)
       }
@@ -201,7 +232,7 @@ export async function DELETE(req: NextRequest) {
 
 async function existsInWorkshop(
   service: Parameters<Parameters<typeof withAuth>[1]>[1]['service'],
-  table: 'clusters' | 'notes',
+  table: 'clusters' | 'notes' | 'ax_tasks',
   id: string | null,
   workshopId: string,
 ) {

@@ -14,6 +14,11 @@ export default async function DashboardPage() {
     redirect('/auth/login')
   }
 
+  // Check if user is approved
+  if (user.user_metadata?.approved !== true) {
+    redirect('/auth/login')
+  }
+
   const service = createServiceRoleClient()
   const { data: projects } = await service
     .from('projects')
@@ -41,5 +46,7 @@ export default async function DashboardPage() {
     }
   })
 
-  return <ProjectDashboard initialProjects={dashboardProjects} />
+  const isAdmin = user.user_metadata?.role === 'admin'
+
+  return <ProjectDashboard initialProjects={dashboardProjects} isAdmin={isAdmin} />
 }

@@ -47,6 +47,7 @@ export interface Workshop extends Entity, Timestamped {
   settings: WorkshopSettings
   is_processing: boolean
   is_processing_since: string | null
+  design_step: number
 }
 
 export interface Participant extends Entity {

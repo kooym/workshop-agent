@@ -45,7 +45,8 @@ export interface DesignArtifact extends Entity, Timestamped {
   agent_specs: AgentSpec[]
   kpis: Kpi[]
   data_requirements: DataRequirement[]
-  org_requirements: OrgRequirement[]
+  alternative_index: number
+  alternative_name: string
   version: number
   is_stale: boolean
 }

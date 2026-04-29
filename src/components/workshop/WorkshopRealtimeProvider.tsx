@@ -48,12 +48,16 @@ export function WorkshopRealtimeProvider({
     let reconnectFailures = 0
 
     const refreshAll = () => {
-      void refetchWorkshop(workshop.id)
-      void refetchGraph(workshop.id, currentParticipant.id)
-      void refetchNotes(workshop.id)
-      void refetchClusters(workshop.id)
-      void refetchVotes(workshop.id)
-      void refetchDesign(workshop.id)
+      // Random jitter (0-2s) to prevent thundering herd when all clients react simultaneously
+      const jitter = Math.random() * 2000
+      setTimeout(() => {
+        void refetchWorkshop(workshop.id)
+        void refetchGraph(workshop.id, currentParticipant.id)
+        void refetchNotes(workshop.id)
+        void refetchClusters(workshop.id)
+        void refetchVotes(workshop.id)
+        void refetchDesign(workshop.id)
+      }, jitter)
     }
 
     const workshopChannel = supabase
@@ -80,19 +84,23 @@ export function WorkshopRealtimeProvider({
         }
       })
 
-    const graphTables = ['process_steps', 'process_edges', 'process_lanes', 'editing_locks']
-    const graphChannels = graphTables.map((table) =>
-      supabase
-        .channel(`${table}:${workshop.id}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table, filter: `workshop_id=eq.${workshop.id}` },
-          () => {
-            void refetchGraph(workshop.id, currentParticipant.id)
-          },
-        )
-        .subscribe(),
-    )
+    const graphTables = ['process_steps', 'process_edges', 'process_lanes', 'editing_locks'] as const
+    let graphDebounceTimer: ReturnType<typeof setTimeout> | undefined
+    const graphHandler = () => {
+      clearTimeout(graphDebounceTimer)
+      graphDebounceTimer = setTimeout(() => {
+        void refetchGraph(workshop.id, currentParticipant.id)
+      }, 500)
+    }
+    const graphChannel = supabase.channel(`graph:${workshop.id}`)
+    for (const table of graphTables) {
+      graphChannel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table, filter: `workshop_id=eq.${workshop.id}` },
+        graphHandler,
+      )
+    }
+    graphChannel.subscribe()
 
     const notesChannel = supabase
       .channel(`notes:${workshop.id}`)
@@ -141,19 +149,18 @@ export function WorkshopRealtimeProvider({
         }
       })
 
-    const designTables = ['ax_tasks', 'design_artifacts', 'prds', 'ax_reports']
-    const designChannels = designTables.map((table) =>
-      supabase
-        .channel(`design:${table}:${workshop.id}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table, filter: `workshop_id=eq.${workshop.id}` },
-          () => {
-            void refetchDesign(workshop.id)
-          },
-        )
-        .subscribe(),
-    )
+    const designTables = ['ax_tasks', 'design_artifacts', 'prds', 'ax_reports'] as const
+    const designChannel = supabase.channel(`design:${workshop.id}`)
+    for (const table of designTables) {
+      designChannel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table, filter: `workshop_id=eq.${workshop.id}` },
+        () => {
+          void refetchDesign(workshop.id)
+        },
+      )
+    }
+    designChannel.subscribe()
 
     const reactionsChannel = supabase
       .channel(`reactions:${workshop.id}`)
@@ -180,16 +187,13 @@ export function WorkshopRealtimeProvider({
     })
 
     return () => {
+      clearTimeout(graphDebounceTimer)
       void supabase.removeChannel(workshopChannel)
-      graphChannels.forEach((channel) => {
-        void supabase.removeChannel(channel)
-      })
+      void supabase.removeChannel(graphChannel)
       void supabase.removeChannel(notesChannel)
       void supabase.removeChannel(clustersChannel)
       void supabase.removeChannel(votesChannel)
-      designChannels.forEach((channel) => {
-        void supabase.removeChannel(channel)
-      })
+      void supabase.removeChannel(designChannel)
       void supabase.removeChannel(reactionsChannel)
       void supabase.removeChannel(presenceChannel)
     }

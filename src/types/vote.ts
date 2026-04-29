@@ -7,6 +7,7 @@ export interface Vote extends Entity {
   participant_id: string
   cluster_id: string | null
   note_id: string | null
+  task_id: string | null
   created_at: string
 }
 

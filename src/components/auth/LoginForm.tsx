@@ -10,10 +10,12 @@ export function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pendingMessage, setPendingMessage] = useState('')
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setPendingMessage('')
     setIsSubmitting(true)
 
     const response = await fetch('/api/auth/login', {
@@ -25,18 +27,28 @@ export function LoginForm() {
     setIsSubmitting(false)
 
     if (!response.ok) {
+      if (response.status === 403) {
+        setPendingMessage(payload.error?.message ?? '관리자 승인 대기 중입니다.')
+        return
+      }
       setError(payload.error?.message ?? '로그인에 실패했습니다.')
       return
     }
 
-    router.push('/dashboard')
+    // Admin goes to admin dashboard, facilitator to workshop dashboard
+    const role = payload.data?.user?.user_metadata?.role
+    if (role === 'admin') {
+      router.push('/admin')
+    } else {
+      router.push('/dashboard')
+    }
     router.refresh()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-apple-lg border border-hairline bg-white p-6">
       <div className="space-y-2">
-        <label htmlFor="email" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="email" className="block text-sm font-medium text-ink">
           이메일
         </label>
         <input
@@ -44,13 +56,13 @@ export function LoginForm() {
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
       <div className="space-y-2">
-        <label htmlFor="password" className="block text-sm font-medium text-neutral-200">
+        <label htmlFor="password" className="block text-sm font-medium text-ink">
           비밀번호
         </label>
         <input
@@ -58,24 +70,29 @@ export function LoginForm() {
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+          className="w-full rounded-full border border-hairline bg-canvas-parchment px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           required
         />
       </div>
 
-      {error ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {pendingMessage ? (
+        <div className="rounded-apple-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {pendingMessage}
+        </div>
+      ) : null}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-neutral-700"
+        className="w-full rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-canvas-parchment disabled:text-ink-muted-48"
       >
         {isSubmitting ? '로그인 중' : '로그인'}
       </button>
 
-      <p className="text-center text-sm text-neutral-400">
+      <p className="text-center text-sm text-ink-muted-48">
         계정이 없으신가요?{' '}
-        <Link href="/auth/signup" className="text-neutral-100 underline-offset-4 hover:underline">
+        <Link href="/auth/signup" className="text-ink underline-offset-4 hover:underline">
           회원가입
         </Link>
       </p>

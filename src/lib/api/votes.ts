@@ -16,19 +16,24 @@ export function shouldHideVoteResults(workshop: Tables<'workshops'>) {
 
 export function resolveVoteTarget(
   voteMode: VoteTargetType,
-  input: { cluster_id?: string | null; note_id?: string | null },
+  input: { cluster_id?: string | null; note_id?: string | null; task_id?: string | null },
 ) {
+  // Task voting (design stage 2nd round)
+  if (input.task_id) {
+    return { cluster_id: null, note_id: null, task_id: input.task_id }
+  }
+
   if (voteMode === 'cluster') {
     if (!input.cluster_id || input.note_id) {
       return null
     }
-    return { cluster_id: input.cluster_id, note_id: null }
+    return { cluster_id: input.cluster_id, note_id: null, task_id: null }
   }
 
   if (!input.note_id || input.cluster_id) {
     return null
   }
-  return { cluster_id: null, note_id: input.note_id }
+  return { cluster_id: null, note_id: input.note_id, task_id: null }
 }
 
 export function aggregateVoteResults({

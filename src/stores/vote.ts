@@ -81,11 +81,17 @@ export const useVoteStore = create<VoteStore>()(
 
       syncFromRealtime: (eventType, vote) => {
         if (eventType === 'DELETE') {
-          set((state) => ({
-            votes: state.votes.filter((existing) => existing.id !== vote.id),
-            myVotes: state.myVotes.filter((existing) => existing.id !== vote.id),
-            remainingVotes: Math.max(0, state.votesPerPerson - state.myVotes.length + 1),
-          }))
+          set((state) => {
+            const wasMyVote = state.myVotes.some((existing) => existing.id === vote.id)
+            const newMyVotes = state.myVotes.filter((existing) => existing.id !== vote.id)
+            return {
+              votes: state.votes.filter((existing) => existing.id !== vote.id),
+              myVotes: newMyVotes,
+              remainingVotes: wasMyVote
+                ? Math.max(0, state.votesPerPerson - newMyVotes.length)
+                : state.remainingVotes,
+            }
+          })
           return
         }
 

@@ -1,0 +1,240 @@
+# ══════════════════════════════════════════════════════════════
+# Workshop Agent — Docker Compose (로컬 개발 통합 환경)
+#
+# 사용법:
+#   cp .env.example .env            # 환경변수 설정 (Azure API 키 등)
+#   docker compose up -d            # 전체 스택 시작
+#   docker compose logs -f app      # Next.js 로그 확인
+#   docker compose down             # 전체 종료 (데이터 유지)
+#   docker compose down -v          # 전체 종료 + DB 데이터 삭제
+#
+# 환경변수:
+#   .env 파일에서 읽음 (docker-compose.yml과 같은 디렉토리)
+#   .env.local은 호스트 직접 실행(npm run dev)용 — Docker Compose와 무관
+#
+# 포트:
+#   http://localhost:54321  — Supabase API (Kong)
+#   http://localhost:54323  — Supabase Studio
+#   http://localhost:3000   — Next.js 앱
+# ══════════════════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────
+  db:
+    image: public.ecr.aws/supabase/postgres:17.6.1.106
+    restart: unless-stopped
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXP: ${JWT_EXPIRY}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/volumes/db/00-init-supabase.sh:/docker-entrypoint-initdb.d/00-init-supabase.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres && psql -U postgres -d postgres -tAc \"SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime'\" | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ── GoTrue (Auth) ─────────────────────────────────────────
+  auth:
+    image: public.ecr.aws/supabase/gotrue:v2.188.1
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: "0.0.0.0"
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://localhost:${KONG_HTTP_PORT}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://supabase_auth_admin:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: "http://localhost:3000"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: ${JWT_EXPIRY}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "360000"
+      GOTRUE_MINIMUM_PASSWORD_LENGTH: "6"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── PostgREST ─────────────────────────────────────────────
+  rest:
+    image: public.ecr.aws/supabase/postgrest:v14.10
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgresql://authenticator:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PGRST_DB_SCHEMAS: public,graphql_public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
+      PGRST_APP_SETTINGS_JWT_EXP: ${JWT_EXPIRY}
+      PGRST_DB_MAX_ROWS: "1000"
+
+  # ── Realtime ──────────────────────────────────────────────
+  realtime:
+    image: public.ecr.aws/supabase/realtime:v2.86.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: "4000"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: supabase_admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      DB_AFTER_CONNECT_QUERY: "SET search_path TO _realtime"
+      DB_ENC_KEY: supabaserealtime
+      API_JWT_SECRET: ${JWT_SECRET}
+      SECRET_KEY_BASE: "EAx3IQ/wRG1v47ZD4NE4/9RzBI8Jmil3x0yhcW4V2NHBP6c2iPIzwjofi2Ep4HIG+LLYCNqOHzv6nA9m7ABAbg=="
+      METRICS_JWT_SECRET: ${JWT_SECRET}
+      ERL_AFLAGS: "-proto_dist inet_tcp"
+      DNS_NODES: "''"
+      RLIMIT_NOFILE: "10000"
+      APP_NAME: realtime
+      SEED_SELF_HOST: "true"
+      RUN_JANITOR: "true"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "printf \\\\0 > /dev/tcp/0.0.0.0/4000"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Kong (API Gateway) ────────────────────────────────────
+  kong:
+    image: public.ecr.aws/supabase/kong:2.8.1
+    restart: unless-stopped
+    depends_on:
+      auth:
+        condition: service_healthy
+      rest:
+        condition: service_started
+      realtime:
+        condition: service_healthy
+    ports:
+      - "${KONG_HTTP_PORT}:8000"
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /home/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: "64 160k"
+      KONG_NGINX_WORKER_PROCESSES: "1"
+    volumes:
+      - ./docker/volumes/api/kong.yml:/home/kong/kong.yml:ro
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── postgres-meta (Studio용) ──────────────────────────────
+  meta:
+    image: public.ecr.aws/supabase/postgres-meta:v0.96.4
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: "8080"
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: ${POSTGRES_DB}
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+  # ── Supabase Studio ──────────────────────────────────────
+  studio:
+    image: public.ecr.aws/supabase/studio:2026.04.27-sha-4afbe9c
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_healthy
+    ports:
+      - "${STUDIO_PORT}:3000"
+    environment:
+      STUDIO_PG_META_URL: ${STUDIO_PG_META_URL}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: "Workshop Agent"
+      DEFAULT_PROJECT_NAME: "workshop-agent"
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:${KONG_HTTP_PORT}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: ${JWT_SECRET}
+      NEXT_PUBLIC_ENABLE_LOGS: "true"
+      NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
+
+  # ── DB Migrations (one-shot) ──────────────────────────────
+  # Runs app migrations AFTER GoTrue has created auth.users.
+  # Exits with 0 on success. Re-run safe (idempotent).
+  migrations:
+    image: public.ecr.aws/supabase/postgres:17.6.1.106
+    depends_on:
+      auth:
+        condition: service_healthy
+    volumes:
+      - ./supabase/migrations:/app-migrations:ro
+      - ./supabase/seed.sql:/app-seed/seed.sql:ro
+      - ./docker/volumes/db/99-app-migrations.sh:/run-migrations.sh:ro
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    entrypoint: ["bash", "-c", "export POSTGRES_PASSWORD=$$PGPASSWORD && bash /run-migrations.sh"]
+    restart: "no"
+
+  # ── Next.js App ───────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:${KONG_HTTP_PORT}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT}
+
+volumes:
+  pgdata:
